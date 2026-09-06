@@ -115,7 +115,7 @@ local isDownloadingAvatar = false
 
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local avatarUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/main/543199739_2812856088914181_3062917809445648175_n.jpg"
     local fileName = "payomboyz_avatar.jpg"
     
     pcall(function()
@@ -700,7 +700,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         performLogoutKeyClear()
         if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"))()
         end)
     end)
 
