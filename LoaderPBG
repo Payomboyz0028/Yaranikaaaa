@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 3: Multi-Game PlaceId Router (Loader.lua)
--- URL: https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/LoaderPBG
+-- URL: https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/LoaderPBG
 -- ==============================================================================
 
 -- Anti-Cheat Compliant Clean Loader Header
@@ -275,7 +275,7 @@ local VVIPRouter = {
     [119524374829397] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
     [80693195250724] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
     [112316840155266] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
-
+    [132785415090516] = { Name = "Iron Soul", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/ironsoulboss", Keywords = {"Iron Soul"} },
 }
 
 -- ส่งออกข้อมูล Router ไปยัง Global Environment เพื่อให้ Start.txt และ Waiting.txt ดึงข้อมูลได้ทันที
@@ -359,7 +359,7 @@ local function LoadWaitingHub()
     end)
     if not loaded then
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey?t=" .. tostring(tick())))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey?t=" .. tostring(tick())))()
         end)
     end
 end
