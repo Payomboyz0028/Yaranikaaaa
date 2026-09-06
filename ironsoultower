@@ -23,6 +23,7 @@ if not player then
 end
 
 local playerGui = player and (player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui"))
+local scriptStartTime = tick()
 
 local Config = {
     AutoFarm = true,
@@ -362,24 +363,60 @@ end
 
 -- Settlement detector: ตรวจสอบหน้าต่างจบเกม (VICTORY / DEFEAT / GameOver)
 local function isSettlementScreenVisible()
-    -- สัญญาณที่ 0 (Server State โดยตรง): GameRoundCfg GameOver
-    local ok, isOver = pcall(function()
-        local grc = game.ReplicatedStorage:FindFirstChild("GameRoundCfg")
-        return grc and grc:GetAttribute("GameOver") == true
+    -- ป้องกัน race condition ตอนเพิ่งเริ่มสคริปต์/เพิ่งเข้าเกม (ห้ามตรวจใน 15 วินาทีแรกเด็ดขาด)
+    if tick() - scriptStartTime < 15.0 then
+        return false
+    end
+
+    -- ถ้าอยู่ใน Lobby (Main place) ห้ามตรวจจับ Settlement เด็ดขาด
+    local isMainPlace = false
+    pcall(function()
+        local placeUtil = require(game.ReplicatedStorage:WaitForChild("Utility"):WaitForChild("GamePlaceUtil"))
+        if placeUtil and placeUtil:IsMain() then
+            isMainPlace = true
+        end
     end)
-    if ok and isOver then
+    if isMainPlace then
+        return false
+    end
+
+    -- สัญญาณที่ 0 (Server State โดยตรง): GameRoundCfg GameOver แต่ต้องเล่นจบครบทุกรอบแล้วจริงๆ (GameRoundComplete >= MaxRound)
+    local serverGameOver = false
+    pcall(function()
+        local grc = game.ReplicatedStorage:FindFirstChild("GameRoundCfg")
+        if grc and grc:GetAttribute("GameOver") == true then
+            local complete = grc:GetAttribute("GameRoundComplete") or 0
+            local maxRound = grc:GetAttribute("MaxRound") or 0
+            if maxRound > 0 and complete >= maxRound then
+                serverGameOver = true
+            end
+        end
+    end)
+    if serverGameOver then
         return true
     end
 
     local pgui = playerGui or game.Players.LocalPlayer:FindFirstChild("PlayerGui")
     if not pgui then return false end
 
-    -- สัญญาณที่ 1 (หลัก): ResultGui.ScreenSettlement เปิดอยู่จริงในเกมนี้
+    -- สัญญาณที่ 1 (หลัก): ResultGui.ScreenSettlement เปิดอยู่จริงในเกมนี้ และมีข้อความ VICTORY หรือ FAILED แสดงอยู่
     local rg = pgui:FindFirstChild("ResultGui")
     if rg and rg:IsA("ScreenGui") and rg.Enabled then
         local ss = rg:FindFirstChild("ScreenSettlement")
         if ss and ss.Visible then
-            return true
+            local vic = ss:FindFirstChild("Victory")
+            local fail = ss:FindFirstChild("Failed")
+            if (vic and vic.Visible) or (fail and fail.Visible) then
+                return true
+            end
+            local bg = ss:FindFirstChild("BtnGroup")
+            if bg and bg.Visible then
+                local pa = bg:FindFirstChild("PlayAgainBtn") or bg:FindFirstChild("PlayAgainAloneBtn")
+                local rl = bg:FindFirstChild("ReturnToLobbyBtn")
+                if (pa and pa.Visible) or (rl and rl.Visible) then
+                    return true
+                end
+            end
         end
     end
 
@@ -389,24 +426,15 @@ local function isSettlementScreenVisible()
         or pgui:FindFirstChild("SettlementGUI")
     if sGui then
         if sGui:IsA("ScreenGui") and sGui.Enabled then
-            return true
+            for _, c in ipairs(sGui:GetChildren()) do
+                if c:IsA("GuiObject") and c.Visible then return true end
+            end
         elseif sGui:IsA("GuiObject") and sGui.Visible then
             return true
         end
     end
 
-    -- สัญญาณที่ 3: มีปุ่ม Play Again หรือ Return to Lobby ที่มองเห็นได้
-    local ss2 = rg and rg:FindFirstChild("ScreenSettlement")
-    local bg = ss2 and ss2:FindFirstChild("BtnGroup")
-    if bg then
-        local pa = bg:FindFirstChild("PlayAgainBtn") or bg:FindFirstChild("PlayAgainAloneBtn")
-        local rl = bg:FindFirstChild("ReturnToLobbyBtn")
-        if (pa and pa.Visible) or (rl and rl.Visible) then
-            return true
-        end
-    end
-
-    -- สัญญาณที่ 4: Game phase = Settlement via _G
+    -- สัญญาณที่ 3: Game phase = Settlement via _G
     if _G.IronSoul_Phase == "Settlement" or _G.IronSoul_Phase == "SETTLEMENT" then
         return true
     end
