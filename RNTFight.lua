@@ -800,7 +800,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         performLogoutKeyClear()
         if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"))()
         end)
     end)
 
