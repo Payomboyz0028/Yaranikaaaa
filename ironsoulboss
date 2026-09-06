@@ -48,12 +48,11 @@ local Config = {
     AboveHeight = 8,
     UndergroundHeight = 8,
     UndergroundMode = true,
-    -- Adaptive height: ปรับความสูงอัตโนมัติเมื่อรับดาเมจหนัก
+    -- Adaptive height engine
     AdaptiveHeight = true,
     AdaptiveHeightStep = 4,
     AdaptiveHeightMax = 30,
     AdaptiveHeightMin = 2,
-    -- ดาเมจ threshold ที่จะ trigger adaptive height (% of max HP)
     DamageAdaptThreshold = 0.12,
 
     KillAuraRadius = 45,
@@ -62,27 +61,13 @@ local Config = {
     PortalRefresh = 1.00,
     SkillInterval = 2.50,
     RoomClearRadius = 140,
-    -- เพิ่มเวลา delay ก่อนเข้าวาป และเพิ่ม confirm scan
-    RoomClearDelay = 3.5,       -- รอ 3.5 วิหลังไม่เจอมอน (เพิ่มจาก 1.25)
-    RoomClearConfirmDelay = 1.5, -- รอ confirm อีก 1.5 วิหลัง spatial scan ก็ไม่เจอ
-    TargetSearchRadius = 600,
+    RoomClearDelay = 1.25,
+    TargetSearchRadius = 10000,
     DoorInteractDistance = 18,
     DoorOpenWait = 0.90,
-    ExitSearchRadius = 600,
+    ExitSearchRadius = 10000,
     ExitRetryDelay = 0.75,
-    -- Portal stuck detection
     PortalStuckTimeout = 4.0,
-
-    -- ระบบเปิดกล่องอัตโนมัติในดันเจี้ยน
-    AutoOpenChest = true,
-    ChestSearchRadius = 80,      -- รัศมีค้นหากล่อง
-    ChestOpenDelay = 0.5,        -- delay ระหว่างเปิดกล่องแต่ละใบ
-
-    -- Ultimate G
-    AutoUltimate = true,         -- เปิด G ultimate อัตโนมัติ
-    GHpTrigger = 0.60,           -- trigger G เมื่อ HP มอน < 60%
-    GAlwaysInterval = 10.0,      -- ยิง G ทุก N วิแม้ HP ยังสูง
-    GCooldown = 12.0,            -- cooldown G (วิ)
 
     MovementInterval = 1 / 30,
     AttackInterval = 0.10,
@@ -125,14 +110,7 @@ local State = {
         Q = 0,
         E = 0,
         R = 0,
-        G = 0,
     },
-    GUltimateReady = false,   -- G ultimate พร้อมใช้
-    PatrolBusy = false,       -- กำลัง patrol scan อยู่
-    PatrolTimer = 0,          -- timer ระหว่าง patrol
-    PortalStuckTimer = 0,     -- นับเวลาที่ติดอยู่หน้าวาป
-    LastPortalPos = nil,      -- ตำแหน่งวาปล่าสุด
-    SettlementNotified = false, -- แจ้งเตือนเมื่อชนะแล้ว
 
     StageBusy = false,
     StageCooldown = false,
@@ -153,14 +131,12 @@ local State = {
     UndergroundPhysics = false,
     LastPortalScan = 0,
     RoomClearTimer = 0,
-    RoomClearConfirmTimer = 0,  -- timer สำหรับ confirm scan ว่ามอนหมดจริง
-    RoomClearConfirmed = false, -- ผ่าน spatial confirm scan แล้ว
+    SettlementNotified = false,
     DoorBusy = false,
     DoorCooldown = false,
     StageBusyTimer = 0,
     WatchdogTimer = 0,
     FallbackTargetTimer = 0,
-    ChestBusy = false,          -- กำลังเปิดกล่องอยู่
     Stats = {
         Heartbeats = 0,
         TargetScans = 0,
@@ -204,7 +180,6 @@ local function getSaveData()
         AutoAvoid = Config.AutoAvoid,
         AutoProgressStage = Config.AutoProgressStage,
         AutoReturnToLobby = Config.AutoReturnToLobby,
-        AfterRunMode = Config.AfterRunMode,
         OrbitRadius = Config.OrbitRadius,
         OrbitSpeed = Config.OrbitSpeed,
         AboveHeight = Config.AboveHeight,
@@ -221,8 +196,6 @@ local function getSaveData()
         ExitSearchRadius = Config.ExitSearchRadius,
         ExitRetryDelay = Config.ExitRetryDelay,
         Debug = Config.Debug,
-        AutoOpenChest = Config.AutoOpenChest,
-        ChestSearchRadius = Config.ChestSearchRadius,
     }
 end
 
@@ -249,14 +222,22 @@ local function loadSettings()
         if type(data) == "table" then
             for _, key in ipairs({
                 "AutoFarm", "AutoSkill", "AutoAttack", "AutoAvoid", "Debug",
-                "AutoProgressStage", "AutoReturnToLobby", "AfterRunMode", "OrbitRadius", "OrbitSpeed",
+                "AutoProgressStage", "AutoReturnToLobby", "OrbitRadius", "OrbitSpeed",
                 "AboveHeight", "UndergroundHeight", "UndergroundMode",
                 "KillAuraRadius", "TargetSearchRadius", "DoorInteractDistance", "DoorOpenWait", "ExitSearchRadius", "ExitRetryDelay", "PerformanceMode", "SafeMode",
-                "EmergencyEscape", "AutoOpenChest", "ChestSearchRadius"
+                "EmergencyEscape"
             }) do
                 if data[key] ~= nil then
                     Config[key] = data[key]
                 end
+            end
+
+            -- ป้องกันไฟล์ settings เก่า override ค่าระยะค้นหา 600 studs กลับมา
+            if Config.TargetSearchRadius < 5000 then
+                Config.TargetSearchRadius = 10000
+            end
+            if Config.ExitSearchRadius < 5000 then
+                Config.ExitSearchRadius = 10000
             end
 
             if type(data.AccentColor) == "table" then
@@ -279,22 +260,13 @@ local function loadSettings()
 end
 
 local lastReturnLobbyTime = 0
--- _G bridge: sync AfterRunMode กับ src_irs.txt
 _G.IronSoul_AfterRunMode = Config.AfterRunMode
 
 local function returnToLobby()
     pcall(function()
-        local fw = require(game.ReplicatedStorage:WaitForChild("Framework"))
-        if fw and fw.Modules and fw.Modules.WorldUtil and fw.Modules.WorldUtil.RemoteEvent then
-            fw.Modules.WorldUtil.RemoteEvent:FireServer("BackLobby")
-        end
-    end)
-    pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         local gamePlayerRE = remotes and remotes:FindFirstChild("GamePlayerRE")
-        if gamePlayerRE then
-            gamePlayerRE:FireServer("ExitSettlement")
-        end
+        if gamePlayerRE then gamePlayerRE:FireServer("ExitSettlement") end
     end)
 end
 
@@ -478,6 +450,7 @@ local function isSettlementScreenVisible()
     return false
 end
 
+
 local function connect(signal, callback)
     local connection = signal:Connect(callback)
     table.insert(Connections, connection)
@@ -492,7 +465,7 @@ end
 
 pcall(loadSettings)
 
--- Default AutoFarm to true for seamless dungeon start.
+-- Default AutoFarm to true for seamless Endless Tower start.
 Config.AutoFarm = true
 _G.AutoFarm = true
 
@@ -611,49 +584,35 @@ end
 local function installHealthWatcher()
     local humanoid = State.Humanoid
     if not humanoid then return end
-
     local previous = humanoid.Health
-
     connectCharacter(humanoid.HealthChanged, function(health)
-        local delta = previous - health -- ดาเมจที่รับ
+        local delta = previous - health
         if delta > 0 then
             State.LastDamageTime = os.clock()
-
             -- Adaptive Height Engine
             if Config.AdaptiveHeight and humanoid.MaxHealth > 0 then
                 local dmgPct = delta / humanoid.MaxHealth
                 if dmgPct >= Config.DamageAdaptThreshold then
-                    -- บินอยู่ → บินสูงขึ้น | มุดดินอยู่ → ลึกลงอีก
                     if Config.UndergroundMode then
-                        Config.UndergroundHeight = math.min(
-                            Config.AdaptiveHeightMax,
-                            Config.UndergroundHeight + Config.AdaptiveHeightStep
-                        )
+                        Config.UndergroundHeight = math.min(Config.AdaptiveHeightMax, Config.UndergroundHeight + Config.AdaptiveHeightStep)
                     else
-                        Config.AboveHeight = math.min(
-                            Config.AdaptiveHeightMax,
-                            Config.AboveHeight + Config.AdaptiveHeightStep
-                        )
+                        Config.AboveHeight = math.min(Config.AdaptiveHeightMax, Config.AboveHeight + Config.AdaptiveHeightStep)
                     end
-                    -- คืนค่าหลัง 8 วินาที
                     local savedUG = Config.UndergroundHeight
                     local savedAB = Config.AboveHeight
                     task.delay(8, function()
                         if not State.Unloaded then
                             Config.UndergroundHeight = math.max(Config.AdaptiveHeightMin, savedUG - Config.AdaptiveHeightStep)
-                            Config.AboveHeight       = math.max(Config.AdaptiveHeightMin, savedAB - Config.AdaptiveHeightStep)
+                            Config.AboveHeight = math.max(Config.AdaptiveHeightMin, savedAB - Config.AdaptiveHeightStep)
                         end
                     end)
                 end
             end
-
             if Config.AutoAvoid then State.CurrentAction = "Avoiding Attack" end
             if Config.EmergencyEscape then task.spawn(function() emergencyEscape("Emergency Escape") end) end
         end
-
         previous = health
-        State.TargetHealthPercent =
-            State.TargetHumanoid
+        State.TargetHealthPercent = State.TargetHumanoid
             and State.TargetHumanoid.MaxHealth > 0
             and math.clamp(State.TargetHumanoid.Health / State.TargetHumanoid.MaxHealth, 0, 1) * 100
             or 0
@@ -722,6 +681,9 @@ local function getAliveTargetParts(model)
 
     local root = model:FindFirstChild("HumanoidRootPart")
         or model.PrimaryPart
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChildWhichIsA("BasePart")
 
     if not root or not root:IsA("BasePart") then
         return nil, nil
@@ -752,6 +714,10 @@ local function scoreTarget(model, humanoid, root, distanceSquared)
     local score = 0
     local name = string.lower(model.Name)
 
+    -- คำนวณระยะห่างจริง: มอนสเตอร์ใกล้ควรได้ความสำคัญสูงกว่ามอนสเตอร์ไกลเสมอ
+    local dist = math.sqrt(distanceSquared)
+    score -= (dist * 0.05)
+
     if distanceSquared < 15 * 15 then
         score += 8
     elseif distanceSquared < 35 * 35 then
@@ -775,7 +741,7 @@ local function scoreTarget(model, humanoid, root, distanceSquared)
     end
 
     if root.Position.Y < -500 then
-        score -= 2
+        score -= 50
     end
 
     return score
@@ -839,12 +805,39 @@ local function findNearestTargetFallback()
         return nil, nil, nil
     end
 
+    local origin = State.Root.Position
+
+    -- ตรวจสอบ EnemyNpc โดยตรงก่อนใน fallback (ไม่มีจำกัดระยะทาง)
+    local enemyNpcFolder = workspace:FindFirstChild("EnemyNpc")
+    if enemyNpcFolder then
+        local bestM, bestR, bestH = nil, nil, nil
+        local bestS = -math.huge
+        for _, model in ipairs(enemyNpcFolder:GetChildren()) do
+            if model:IsA("Model") and model ~= State.Character then
+                local hum, tr = getAliveTargetParts(model)
+                if hum and tr and hum.Health > 0 then
+                    local offset = origin - tr.Position
+                    local dSq = offset:Dot(offset)
+                    local s = scoreTarget(model, hum, tr, dSq)
+                    if s > bestS then
+                        bestS = s
+                        bestM = model
+                        bestR = tr
+                        bestH = hum
+                    end
+                end
+            end
+        end
+        if bestM then
+            return bestM, bestR, bestH
+        end
+    end
+
     fallbackOverlapParams.FilterDescendantsInstances = {
         State.Character
     }
 
-    local origin = State.Root.Position
-    local radius = Config.TargetSearchRadius
+    local radius = math.min(Config.TargetSearchRadius, 512)
     local radiusSquared = radius * radius
 
     local seen = {}
@@ -929,13 +922,49 @@ local function findNearestTarget()
     local nearestModel = nil
     local bestScore = -math.huge
 
+    -- 1. ตรวจสอบโฟลเดอร์ workspace.EnemyNpc โดยตรงก่อน (หัวใจหลักของ Iron Soul)
+    -- ทุกดันเจี้ยน มอนสเตอร์จะถูก spawn ลงโฟลเดอร์นี้
+    local enemyNpcFolder = workspace:FindFirstChild("EnemyNpc")
+    if enemyNpcFolder then
+        for _, model in ipairs(enemyNpcFolder:GetChildren()) do
+            if model:IsA("Model") and model ~= State.Character then
+                local humanoid, targetRoot = getAliveTargetParts(model)
+                if humanoid and targetRoot and humanoid.Health > 0 then
+                    local offset = origin - targetRoot.Position
+                    local distanceSquared = offset:Dot(offset)
+
+                    if distanceSquared <= searchRadiusSquared then
+                        local score = scoreTarget(
+                            model,
+                            humanoid,
+                            targetRoot,
+                            distanceSquared
+                        )
+
+                        if score > bestScore then
+                            bestScore = score
+                            nearestRoot = targetRoot
+                            nearestHumanoid = humanoid
+                            nearestModel = model
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if nearestModel then
+        return nearestModel, nearestRoot, nearestHumanoid
+    end
+
+    -- 2. ค้นหาจาก enemyCandidates ทั้งหมดใน workspace
     for model in pairs(enemyCandidates) do
         if not model or not model.Parent then
             enemyCandidates[model] = nil
         else
             local humanoid, targetRoot = getAliveTargetParts(model)
 
-            if humanoid and targetRoot then
+            if humanoid and targetRoot and humanoid.Health > 0 then
                 local offset = origin - targetRoot.Position
                 local distanceSquared = offset:Dot(offset)
 
@@ -962,8 +991,7 @@ local function findNearestTarget()
         return nearestModel, nearestRoot, nearestHumanoid
     end
 
-    -- Cache miss: use the spatial fallback, but throttle it so an empty
-    -- room does not cause repeated 600-stud spatial scans.
+    -- 3. Cache miss: use spatial fallback
     if State.FallbackTargetTimer > 0 then
         return nil, nil, nil
     end
@@ -1404,130 +1432,25 @@ end
 
 
 local function teleportNearPortal()
-    if not State.Root then return end
+    if not State.Root then
+        return
+    end
 
     local portal, score = findBestPortalOnly()
-    if not portal or score < 2 then return end
+
+    if not portal or score < 2 then
+        return
+    end
 
     State.Portal = portal
     State.PortalScore = score
 
-    local approach = portal.Position - portal.CFrame.LookVector * 8
-    travelToPosition(approach, portal.Position)
-    task.wait(0.25)
+    local position =
+        portal.Position - portal.CFrame.LookVector * 8
 
-    -- ตรวจสอบว่าวาปสำเร็จไหม (stuck detection)
-    if State.Root and (State.Root.Position - approach).Magnitude > 20 then
-        -- ยังไม่ถึง: ยืนๆสักพักแล้ว teleport ใหม่
-        task.wait(0.5)
-        pcall(function()
-            State.Root.CFrame = CFrame.new(approach)
-            State.Root.AssemblyLinearVelocity = Vector3.zero
-        end)
-        task.wait(0.3)
-        -- nudge เข้าไปในประตูเลย
-        travelToPosition(portal.Position, portal.Position + portal.CFrame.LookVector)
-    end
+    travelToPosition(position, portal.Position)
 end
 
-
--- =====================================================================
--- ระบบเปิดกล่องอัตโนมัติ (Auto Open Chest)
--- =====================================================================
-local function looksLikeChest(model)
-    if not model or not model:IsA("Model") then return false end
-    local n = model.Name:lower()
-    return n:find("chest") or n:find("box") or n:find("treasure")
-        or n:find("loot") or n:find("crate") or n:find("reward")
-        or n:find("present") or n:find("gift") or n:find("dungeon")
-        or n:find("drop")
-end
-
-local function findAndOpenChests()
-    if not Config.AutoOpenChest
-        or State.ChestBusy
-        or not State.Root
-        or not State.Humanoid then
-        return
-    end
-
-    local origin = State.Root.Position
-    local radiusSq = Config.ChestSearchRadius * Config.ChestSearchRadius
-
-    local chestsFound = {}
-
-    -- scan workspace descendants สำหรับ ProximityPrompt ที่อยู่ใน chest model
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            local model = obj:FindFirstAncestorOfClass("Model")
-            if model and looksLikeChest(model) then
-                local pp = model.PrimaryPart or model:FindFirstChildOfClass("BasePart")
-                if pp then
-                    local dist = (origin - pp.Position)
-                    if dist:Dot(dist) <= radiusSq then
-                        table.insert(chestsFound, {prompt = obj, model = model, part = pp})
-                    end
-                end
-            end
-        end
-    end
-
-    -- ถ้าไม่เจอผ่าน model name ลองหา ProximityPrompt ทั่วไปที่อาจเป็นกล่อง
-    if #chestsFound == 0 then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                local part = obj.Parent
-                if part and part:IsA("BasePart") then
-                    -- กรองเฉพาะ prompt ที่ไม่ใช่ประตู/portal
-                    local pn = part.Name:lower()
-                    local mn = part.Parent and part.Parent.Name:lower() or ""
-                    local isPortal = pn:find("portal") or pn:find("warp") or pn:find("door")
-                        or pn:find("gate") or mn:find("portal") or mn:find("warp")
-                        or mn:find("door") or mn:find("gate")
-                    if not isPortal then
-                        local dist = origin - part.Position
-                        if dist:Dot(dist) <= radiusSq then
-                            table.insert(chestsFound, {prompt = obj, model = nil, part = part})
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if #chestsFound == 0 then return end
-
-    State.ChestBusy = true
-    State.CurrentAction = "Opening Chest"
-
-    for _, entry in ipairs(chestsFound) do
-        if State.Unloaded then break end
-
-        local prompt = entry.prompt
-        local part   = entry.part
-
-        if prompt and prompt.Parent and part and part.Parent then
-            -- teleport เข้าหากล่อง
-            pcall(function()
-                State.Root.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0))
-                State.Root.AssemblyLinearVelocity = Vector3.zero
-            end)
-            task.wait(0.20)
-
-            -- fire ProximityPrompt
-            if type(fireproximityprompt) == "function" then
-                pcall(function() fireproximityprompt(prompt) end)
-            else
-                pcall(function() prompt.Triggered:Fire() end)
-            end
-
-            task.wait(Config.ChestOpenDelay)
-        end
-    end
-
-    State.ChestBusy = false
-    State.CurrentAction = "Farming"
-end
 
 local triggeredSpawns = {}
 
@@ -1540,8 +1463,12 @@ local function findBestSpawnTrigger()
         workspace:FindFirstChild("WaveSpawnTouch"),
         workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("WaveSpawnTouch"),
         workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("RoundWakeTouch"),
-        workspace:FindFirstChild("PlayerRespawn")
+        workspace:FindFirstChild("PlayerRespawn"),
+        workspace:FindFirstChild("World") and workspace.World:FindFirstChild("WaveSpawnTouch"),
+        workspace:FindFirstChild("World") and workspace.World:FindFirstChild("RoundWakeTouch"),
     }
+
+    local now = os.clock()
 
     for _, folder in ipairs(folders) do
         if folder then
@@ -1549,10 +1476,10 @@ local function findBestSpawnTrigger()
                 if child:IsA("BasePart") then
                     local hasTouch = child:FindFirstChildOfClass("TouchTransmitter") ~= nil
                     local dist = (origin - child.Position).Magnitude
-                    local alreadyTriggered = triggeredSpawns[child] ~= nil
-                    -- มี TouchTransmitter = ต้องไปเหยียบแน่นอน
-                    -- ยังไม่เคยเหยียบ และระยะ < 600 = ลองไปเหยียบเพื่อกระตุ้นให้เวฟเกิด
-                    if hasTouch or (not alreadyTriggered and dist < 600) then
+                    local lastTriggered = triggeredSpawns[child]
+                    local alreadyTriggered = lastTriggered and (now - lastTriggered < 20)
+                    -- มี TouchTransmitter หรือยังไม่เคยเหยียบใน 20 วิล่าสุด (ระยะค้นหาสูงสุด 10,000 studs)
+                    if hasTouch or (not alreadyTriggered and dist < 10000) then
                         table.insert(candidates, {
                             part = child,
                             hasTouch = hasTouch,
@@ -1605,8 +1532,6 @@ local function moveToNextStage()
         State.TargetRoot = root
         State.TargetHumanoid = humanoid
         State.RoomClearTimer = 0
-        State.RoomClearConfirmTimer = 0
-        State.RoomClearConfirmed = false
         State.CurrentAction = "Farming"
         return
     end
@@ -1644,39 +1569,15 @@ local function moveToNextStage()
             State.TargetRoot = r
             State.TargetHumanoid = h
             State.RoomClearTimer = 0
-            State.RoomClearConfirmTimer = 0
-            State.RoomClearConfirmed = false
             State.CurrentAction = "Farming"
             return
         end
     end
 
-    -- Phase 1: รอ 1.5 วิหลัง cache miss (ป้องกัน trigger เร็วเกินไป)
-    if State.RoomClearTimer < 1.5 then
+    if State.RoomClearTimer < Config.RoomClearDelay then
         State.CurrentAction = "Clearing"
         return
     end
-
-    -- Phase 2: spatial scan ยืนยัน — ถ้าเจอมอนกลับไปฟาร์ม
-    --          ถ้าไม่เจอ → ไปวาปเลย ไม่รอ phase เพิ่ม
-    if not State.RoomClearConfirmed then
-        local m2, r2, h2 = findNearestTargetFallback()
-        if m2 and r2 and h2 and h2.Health > 0 then
-            State.TargetModel = m2
-            State.TargetRoot = r2
-            State.TargetHumanoid = h2
-            State.RoomClearTimer = 0
-            State.RoomClearConfirmTimer = 0
-            State.RoomClearConfirmed = false
-            State.CurrentAction = "Farming"
-            return
-        end
-        -- spatial scan ไม่เจอ → mark confirmed แล้วตกไปเข้าวาปเลย
-        State.RoomClearConfirmed = true
-    end
-
-    -- ถึงจุดนี้ = หามอนไม่เจอทั้ง cache + spatial scan และเหยียบจุด spawn ครบแล้ว → ไปวาปทันที
-
 
     -- No enemy: immediately refresh the exit list and go to the closest
     -- valid portal/door. This is the old behavior the user wants restored.
@@ -1744,15 +1645,10 @@ local function moveToNextStage()
 
                     travelToPosition(approach, newPortal.Position)
                     task.wait(0.15)
-                    -- nudge เข้า 3 ครั้ง
-                    for _ = 1, 3 do
-                        travelToPosition(
-                            newPortal.Position,
-                            newPortal.Position + newPortal.CFrame.LookVector
-                        )
-                        task.wait(0.4)
-                        if State.Unloaded then break end
-                    end
+                    travelToPosition(
+                        newPortal.Position,
+                        newPortal.Position + newPortal.CFrame.LookVector
+                    )
                 else
                     State.CurrentAction = "Entering Door"
 
@@ -1762,45 +1658,34 @@ local function moveToNextStage()
 
                     travelToPosition(approach, exitObject.Position)
                     task.wait(0.15)
-                    for _ = 1, 3 do
-                        travelToPosition(
-                            exitObject.Position,
-                            exitObject.Position + exitObject.CFrame.LookVector
-                        )
-                        task.wait(0.4)
-                        if State.Unloaded then break end
-                    end
+                    travelToPosition(
+                        exitObject.Position,
+                        exitObject.Position + exitObject.CFrame.LookVector
+                    )
                 end
             end
         else
             State.CurrentAction = "Moving To Portal"
 
-            local portalPos  = exitObject.Position
-            local lookFwd    = exitObject.CFrame.LookVector
+            local portalPos = exitObject.Position
+            local lookFwd   = exitObject.CFrame.LookVector
 
-            -- เดินเข้าหาวาปปกติก่อน
             local approach = portalPos - lookFwd * 6
             travelToPosition(approach, portalPos)
             task.wait(0.3)
 
             State.CurrentAction = "Entering Portal"
 
-            -- ลอง nudge เข้าหลายครั้ง — วัด success จาก exitObject ถูก destroy
-            -- (server จะลบวาปออกหรือ unparent เมื่อโหลดแมพใหม่)
             for attempt = 1, 12 do
                 if State.Unloaded then break end
-
-                -- ถ้า exitObject หายแล้ว = เข้าสำเร็จ
                 if not exitObject.Parent then break end
 
-                -- CFrame เข้าไปในวาป
                 pcall(function()
                     local fwd = lookFwd * (1 + (attempt % 3))
                     State.Root.CFrame = CFrame.new(portalPos + fwd)
                     State.Root.AssemblyLinearVelocity = Vector3.zero
                 end)
 
-                -- trigger Touched event ของ portal โดยตรง
                 if type(firetouchinterest) == "function" and State.Root then
                     pcall(function()
                         firetouchinterest(State.Root, exitObject, 0)
@@ -1811,7 +1696,6 @@ local function moveToNextStage()
 
                 task.wait(0.08)
 
-                -- สลับ travelToPosition ทุก 3 attempt
                 if attempt % 3 == 0 then
                     travelToPosition(portalPos, portalPos + lookFwd)
                     task.wait(0.2)
@@ -1820,28 +1704,20 @@ local function moveToNextStage()
         end
     end)
 
-
-
-
     if not ok and Config.Debug then
         warn("[IronSoul] exit transition error:", err)
     end
 
-    -- รอ server load stage ใหม่
-    task.wait(2.0)
+    -- Allow 1.5 - 2 seconds for server to load the next stage and spawn new mobs
+    task.wait(1.5)
 
     State.StageBusy = false
     State.StageBusyTimer = 0
     State.StageCooldown = true
     State.RoomClearTimer = 0
-    State.RoomClearConfirmTimer = 0
-    State.RoomClearConfirmed = false
-    State.PatrolBusy = false
-    State.PortalStuckTimer = 0
-    State.LastPortalPos = nil
     table.clear(triggeredSpawns)
 
-    task.delay(2.5, function()
+    task.delay(2.0, function()
         if not State.Unloaded then
             State.StageCooldown = false
         end
@@ -1851,12 +1727,10 @@ end
 
 rebuildPortalCandidates()
 
--- Cooldowns จริง (วินาที) — ปรับตามเกม
 local SkillCooldownConfig = {
-    Q = 0.80,
-    E = 0.80,
-    R = 2.00,
-    G = 12.0,   -- G ultimate cooldown
+    Q = 0.70,
+    E = 0.70,
+    R = 1.50,
 }
 
 local function useSkills()
@@ -1868,101 +1742,14 @@ local function useSkills()
     end
 
     local now = os.clock()
-    local hpPct = State.TargetHealthPercent / 100  -- 0-1
 
-    -- อ่าน G config จาก Config ถ้ามี
-    local gCooldown   = Config.GCooldown or 12.0
-    local gHpTrigger  = Config.GHpTrigger or 0.60
-    local gAlways     = Config.GAlwaysInterval or 10.0
-    SkillCooldownConfig.G = gCooldown
-
-    -- G (Ultimate)
-    if Config.AutoUltimate then
-        local gLastUsed = State.SkillCooldowns.G - gCooldown
-        local gElapsed  = now - gLastUsed
-        local shouldG = (now >= State.SkillCooldowns.G)
-            and (hpPct < gHpTrigger or gElapsed >= gAlways)
-        if shouldG then
-            pressKey("G")
-            State.SkillCooldowns.G = now + gCooldown
-            State.GUltimateReady = false
-            task.wait(0.12)
+    for _, key in ipairs({"E", "Q", "R"}) do
+        if now >= State.SkillCooldowns[key] then
+            pressKey(key)
+            State.SkillCooldowns[key] = now + SkillCooldownConfig[key]
+            task.wait(0.15)
         end
     end
-
-    -- R — ทุก cooldown (heavy skill)
-    if now >= State.SkillCooldowns.R then
-        pressKey("R")
-        State.SkillCooldowns.R = now + SkillCooldownConfig.R
-        task.wait(0.12)
-    end
-
-    -- E — ทุก cooldown
-    if now >= State.SkillCooldowns.E then
-        pressKey("E")
-        State.SkillCooldowns.E = now + SkillCooldownConfig.E
-        task.wait(0.10)
-    end
-
-    -- Q — basic skill กดบ่อยสุด
-    if now >= State.SkillCooldowns.Q then
-        pressKey("Q")
-        State.SkillCooldowns.Q = now + SkillCooldownConfig.Q
-        task.wait(0.10)
-    end
-end
-
--- =====================================================================
--- Patrol Scan: วนตรวจสอบจุดต่างๆรอบแมพก่อนเข้าวาป
--- =====================================================================
-local function doPatrolScan()
-    if not State.Root or State.Unloaded then return false end
-
-    -- สร้าง sample points รอบ origin ระยะ 60-120 studs
-    local origin = State.Root.Position
-    local angles = {0, 45, 90, 135, 180, 225, 270, 315}
-    local radii  = {50, 100, 150}
-    local found  = false
-
-    for _, r in ipairs(radii) do
-        for _, deg in ipairs(angles) do
-            if State.Unloaded or found then break end
-            local rad = math.rad(deg)
-            local checkPos = Vector3.new(
-                origin.X + math.cos(rad) * r,
-                origin.Y,
-                origin.Z + math.sin(rad) * r
-            )
-            -- teleport ไปตรวจ
-            pcall(function()
-                State.Root.CFrame = CFrame.new(checkPos)
-                State.Root.AssemblyLinearVelocity = Vector3.zero
-            end)
-            task.wait(0.20)
-            -- spatial scan ณ จุดนั้น
-            local m, r2, h = findNearestTargetFallback()
-            if m and h and h.Health > 0 then
-                State.TargetModel    = m
-                State.TargetRoot     = r2
-                State.TargetHumanoid = h
-                State.RoomClearTimer = 0
-                State.RoomClearConfirmTimer = 0
-                State.RoomClearConfirmed    = false
-                found = true
-            end
-        end
-        if found then break end
-    end
-
-    -- teleport กลับ origin
-    pcall(function()
-        if State.Root then
-            State.Root.CFrame = CFrame.new(origin)
-            State.Root.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-    task.wait(0.20)
-    return found
 end
 
 
@@ -1970,17 +1757,19 @@ local orbitRayParams = RaycastParams.new()
 orbitRayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function getGroundY(position)
-    if not State.TargetModel or not State.Character then
+    if not State.Character then
         return nil
     end
 
-    orbitRayParams.FilterDescendantsInstances = {
-        State.TargetModel,
-        State.Character,
-    }
+    local filter = { State.Character }
+    if State.TargetModel then
+        table.insert(filter, State.TargetModel)
+    end
 
-    local rayOrigin = position + Vector3.new(0, 80, 0)
-    local rayDirection = Vector3.new(0, -400, 0)
+    orbitRayParams.FilterDescendantsInstances = filter
+
+    local rayOrigin = position + Vector3.new(0, 100, 0)
+    local rayDirection = Vector3.new(0, -500, 0)
 
     local result = workspace:Raycast(
         rayOrigin,
@@ -2072,15 +1861,31 @@ local function lockCombatPosition()
 
     if not desiredCFrame or not State.Character or not State.Root then
         setUndergroundPhysics(false)
-        if State.Root then
-            -- Anti-Void Fall Protection: Restore character position if dropping below floor level
-            if State.Root.Position.Y < -50 or (State.GroundY and State.Root.Position.Y < (State.GroundY - 3)) then
+        if State.Root and State.Humanoid then
+            pcall(function()
+                State.Humanoid.PlatformStand = false
+                State.Humanoid.AutoRotate = true
+            end)
+
+            -- เมื่อไม่มีมอนสเตอร์ / รอมอนชุดใหม่: วางตัวละครกลับมายืนบนพื้นทันที ป้องกันการร่วงหรือตกใต้ดิน
+            local currentPos = State.Root.Position
+            local gY = getGroundY(currentPos) or State.GroundY
+            if gY and gY > -150 then
                 pcall(function()
-                    local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 4) or 10
-                    State.Root.CFrame = CFrame.new(State.Root.Position.X, targetY, State.Root.Position.Z)
+                    State.GroundY = gY
+                    State.Root.CFrame = CFrame.new(currentPos.X, gY + 3.5, currentPos.Z)
                     State.Root.AssemblyLinearVelocity = Vector3.zero
                     State.Root.AssemblyAngularVelocity = Vector3.zero
                 end)
+            else
+                if currentPos.Y < -50 then
+                    pcall(function()
+                        local targetY = (State.GroundY and State.GroundY > -100) and (State.GroundY + 3.5) or 10
+                        State.Root.CFrame = CFrame.new(currentPos.X, targetY, currentPos.Z)
+                        State.Root.AssemblyLinearVelocity = Vector3.zero
+                        State.Root.AssemblyAngularVelocity = Vector3.zero
+                    end)
+                end
             end
         end
         return
@@ -2110,6 +1915,48 @@ local function updateOrbit(dt)
     end
 
     lockCombatPosition()
+end
+
+local lastStartCheck = 0
+local function checkAutoStartExtraWeapon()
+    local now = tick()
+    if now - lastStartCheck < 0.5 then return end
+    lastStartCheck = now
+
+    pcall(function()
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "ObsidianGlass2_UI" and gui.Name ~= "ObsidianGlass_NotifHolder" then
+                for _, desc in ipairs(gui:GetDescendants()) do
+                    if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+                        local btnText = desc:IsA("TextButton") and desc.Text or ""
+                        local childText = desc:FindFirstChildOfClass("TextLabel") and desc:FindFirstChildOfClass("TextLabel").Text or ""
+                        if btnText == "Start" or childText == "Start" or desc.Name == "Start" or desc.Name == "StartButton" or desc.Name:lower():find("start") then
+                            if typeof(firesignal) == "function" then
+                                pcall(function() firesignal(desc.MouseButton1Click) end)
+                            end
+                            pcall(function()
+                                VirtualInputManager:SendMouseButtonEvent(
+                                    desc.AbsolutePosition.X + desc.AbsoluteSize.X / 2,
+                                    desc.AbsolutePosition.Y + desc.AbsoluteSize.Y / 2,
+                                    0, true, game, 1
+                                )
+                                task.wait(0.05)
+                                VirtualInputManager:SendMouseButtonEvent(
+                                    desc.AbsolutePosition.X + desc.AbsoluteSize.X / 2,
+                                    desc.AbsolutePosition.Y + desc.AbsoluteSize.Y / 2,
+                                    0, false, game, 1
+                                )
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    pcall(function()
+        local matchRE = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("GameMatchRE")
+        if matchRE then matchRE:FireServer("Start") end
+    end)
 end
 
 local function updateKillAura()
@@ -2873,7 +2720,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     tabLayout.Parent = tabScroll
 
     tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+        task.defer(function()
+            pcall(function()
+                if tabScroll and tabLayout then
+                    tabScroll.CanvasSize = UDim2.new(0, 0, 0, tabLayout.AbsoluteContentSize.Y + 10)
+                end
+            end)
+        end)
     end)
 
     local statusCard = Instance.new("Frame")
@@ -3137,7 +2990,13 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         pageLayout.Parent = pageScroll
 
         pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+            task.defer(function()
+                pcall(function()
+                    if pageScroll and pageLayout then
+                        pageScroll.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 20)
+                    end
+                end)
+            end)
         end)
 
         local function activateTab()
@@ -3678,32 +3537,6 @@ MainTab:AddButton({
     end
 })
 
-MainTab:AddSection("ระบบเปิดกล่องในดันเจี้ยน")
-
-MainTab:AddToggle("AutoOpenChest", {
-    Title = "Auto Open Chest (เปิดกล่องในดันอัตโนมัติ)",
-    Desc = "เปิดกล่อง/ไอเทมในดันเจี้ยนอัตโนมัติเมื่อห้องเคลียร์แล้ว (ค้นหา ProximityPrompt)",
-    Default = Config.AutoOpenChest,
-    Callback = function(val)
-        Config.AutoOpenChest = val
-        saveSettings()
-    end
-})
-
-MainTab:AddButton({
-    Title = "📦 Open Chests Now (เปิดกล่องทันที)",
-    Callback = function()
-        task.spawn(function()
-            pcall(findAndOpenChests)
-        end)
-        ObsidianGlassEngine:Notify({
-            Title = "เปิดกล่อง",
-            Content = "กำลังค้นหาและเปิดกล่องในรัศมี " .. Config.ChestSearchRadius .. " Studs...",
-            Duration = 3
-        })
-    end
-})
-
 MainTab:AddToggle("UndergroundMode", {
     Title = "Underground Mode (ตำแหน่งใต้ดิน / ลอยบนฟ้า)",
     Desc = "เปิด = โหมดมุดใต้ดิน (Underground) | ปิด = โหมดลอยเหนือหัว (Above)",
@@ -3760,8 +3593,8 @@ CombatTab:AddToggle("AutoAttack", {
 })
 
 CombatTab:AddToggle("AutoSkill", {
-    Title = "Auto Skill Q/E/R (กดสกิลอัตโนมัติ)",
-    Desc = "กด Q, E, R ตามคูลดาวน์อัตโนมัติขณะต่อสู้",
+    Title = "Auto Skill (กดใช้สกิล Q / E / R อัตโนมัติ)",
+    Desc = "ปลดปล่อยสกิลต่อสู้ตามจังหวะ คูลดาวน์",
     Default = Config.AutoSkill,
     Callback = function(val)
         Config.AutoSkill = val
@@ -3770,38 +3603,9 @@ CombatTab:AddToggle("AutoSkill", {
     end
 })
 
-CombatTab:AddToggle("AutoUltimate", {
-    Title = "Auto G Ultimate (ท่าไม้ตาย G อัตโนมัติ)",
-    Desc = "กด G เมื่อ HP มอน < 60% หรือทุก 10 วินาที — เปิดใช้ร่วมกับ Auto Skill",
-    Default = true,
-    Callback = function(val)
-        Config.AutoUltimate = val
-        -- ถ้าปิด G ให้ reset cooldown เพื่อไม่ block
-        if not val then
-            State.SkillCooldowns.G = math.huge
-        else
-            State.SkillCooldowns.G = 0
-        end
-    end
-})
-
-CombatTab:AddButton({
-    Title = "⚡ Use G Ultimate Now (ใช้ท่าไม้ตายทันที)",
-    Callback = function()
-        pressKey("G")
-        State.SkillCooldowns.G = os.clock() + SkillCooldownConfig.G
-        ObsidianGlassEngine:Notify({
-            Title = "G Ultimate",
-            Content = "ใช้ท่าไม้ตาย G แล้ว! Cooldown " .. SkillCooldownConfig.G .. " วินาที",
-            Duration = 3
-        })
-    end
-})
-
 CombatTab:AddToggle("AutoAvoid", {
     Title = "Auto Avoid Attack (หลบการโจมตีพื้นที่สีแดง)",
     Desc = "ตรวจจับการโจมตีสีแดงของ Boss แล้วเดินหลบออกระยะความปลอดภัย",
-
     Default = Config.AutoAvoid,
     Callback = function(val)
         Config.AutoAvoid = val
@@ -3948,40 +3752,35 @@ SystemTab:AddButton({
     end
 })
 
-local function GetSafeParentGui()
-    if typeof(gethui) == "function" then
-        local ok, h = pcall(gethui)
-        if ok and h then return h end
-    end
-    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-    if ok and cg then
-        local canAccess = pcall(function() local _ = cg.Name return true end)
-        if canAccess then return cg end
-    end
-    return player:FindFirstChildOfClass("PlayerGui") or playerGui
-end
-
--- ════════════════════════════════════════════════════
--- TOP-RIGHT AUTONOMOUS TELEMETRY HUD OVERLAY
--- ════════════════════════════════════════════════════
-local parentGui = GetSafeParentGui()
-if parentGui:FindFirstChild("IronSoul_TopRightHUD") then
-    parentGui.IronSoul_TopRightHUD:Destroy()
-end
-
+-- ════════════════════════════════════════════════
+-- ENDLESS TOWER TOP-RIGHT GLASSMORPHIC TELEMETRY HUD OVERLAY
+-- ════════════════════════════════════════════════
 local hudGui = Instance.new("ScreenGui")
-hudGui.Name = "IronSoul_TopRightHUD"
+hudGui.Name = "IronSoul_EndlessTopRightHUD"
 hudGui.ResetOnSpawn = false
 hudGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-hudGui.Parent = parentGui
 
--- Main HUD Panel (Position: Top Right)
+pcall(function()
+    if gethui then
+        hudGui.Parent = gethui()
+    elseif syn and syn.protect_gui then
+        syn.protect_gui(hudGui)
+        hudGui.Parent = CoreGui
+    else
+        hudGui.Parent = CoreGui
+    end
+end)
+if not hudGui.Parent then hudGui.Parent = player:WaitForChild("PlayerGui") end
+
+-- Outer Window Frame (Crimson/Magenta Glass Theme for Endless Tower)
 local hudFrame = Instance.new("Frame")
-hudFrame.Size = UDim2.new(0, 325, 0, 240)
+hudFrame.Size = UDim2.new(0, 325, 0, 245)
 hudFrame.Position = UDim2.new(1, -340, 0, 15)
-hudFrame.BackgroundColor3 = Color3.fromRGB(15, 8, 12)
-hudFrame.BackgroundTransparency = 0.12
+hudFrame.BackgroundColor3 = Color3.fromRGB(18, 9, 14)
+hudFrame.BackgroundTransparency = 0.15
 hudFrame.BorderSizePixel = 0
+hudFrame.Active = true
+hudFrame.Draggable = true
 hudFrame.Parent = hudGui
 
 local hudCorner = Instance.new("UICorner")
@@ -3989,116 +3788,112 @@ hudCorner.CornerRadius = UDim.new(0, 10)
 hudCorner.Parent = hudFrame
 
 local hudStroke = Instance.new("UIStroke")
-hudStroke.Color = Color3.fromRGB(255, 45, 85)
+hudStroke.Color = Color3.fromRGB(255, 60, 110)
 hudStroke.Thickness = 1.5
 hudStroke.Transparency = 0.25
 hudStroke.Parent = hudFrame
 
 -- Title Header Bar
-local headerFrame = Instance.new("Frame")
-headerFrame.Size = UDim2.new(1, 0, 0, 28)
-headerFrame.BackgroundColor3 = Color3.fromRGB(32, 14, 20)
-headerFrame.BackgroundTransparency = 0.2
-headerFrame.BorderSizePixel = 0
-headerFrame.Parent = hudFrame
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 32)
+titleBar.BackgroundColor3 = Color3.fromRGB(35, 12, 22)
+titleBar.BackgroundTransparency = 0.2
+titleBar.BorderSizePixel = 0
+titleBar.Parent = hudFrame
 
-local headerCorner = Instance.new("UICorner")
-headerCorner.CornerRadius = UDim.new(0, 10)
-headerCorner.Parent = headerFrame
+local tbCorner = Instance.new("UICorner")
+tbCorner.CornerRadius = UDim.new(0, 10)
+tbCorner.Parent = titleBar
 
-local headerTitle = Instance.new("TextLabel")
-headerTitle.Size = UDim2.new(1, -60, 1, 0)
-headerTitle.Position = UDim2.new(0, 10, 0, 0)
-headerTitle.BackgroundTransparency = 1
-headerTitle.Text = "⚡ IRON SOUL TELEMETRY HUD"
-headerTitle.TextColor3 = Color3.fromRGB(255, 45, 85)
-headerTitle.Font = Enum.Font.GothamBold
-headerTitle.TextSize = 11
-headerTitle.TextXAlignment = Enum.TextXAlignment.Left
-headerTitle.Parent = headerFrame
+local hudTitleLabel = Instance.new("TextLabel")
+hudTitleLabel.Size = UDim2.new(1, -60, 1, 0)
+hudTitleLabel.Position = UDim2.new(0, 10, 0, 0)
+hudTitleLabel.BackgroundTransparency = 1
+hudTitleLabel.Text = "🏰 ENDLESS TOWER TELEMETRY HUD"
+hudTitleLabel.TextColor3 = Color3.fromRGB(255, 180, 210)
+hudTitleLabel.Font = Enum.Font.GothamBold
+hudTitleLabel.TextSize = 11
+hudTitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+hudTitleLabel.Parent = titleBar
 
 local liveBadge = Instance.new("TextLabel")
-liveBadge.Size = UDim2.new(0, 46, 0, 18)
-liveBadge.Position = UDim2.new(1, -52, 0, 5)
-liveBadge.BackgroundColor3 = Color3.fromRGB(46, 224, 140)
-liveBadge.BackgroundTransparency = 0.8
+liveBadge.Size = UDim2.new(0, 48, 0, 18)
+liveBadge.Position = UDim2.new(1, -54, 0, 7)
+liveBadge.BackgroundColor3 = Color3.fromRGB(220, 38, 38)
+liveBadge.BackgroundTransparency = 0.2
 liveBadge.Text = "● LIVE"
-liveBadge.TextColor3 = Color3.fromRGB(46, 224, 140)
+liveBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
 liveBadge.Font = Enum.Font.GothamBold
-liveBadge.TextSize = 10
-liveBadge.Parent = headerFrame
+liveBadge.TextSize = 9.5
+liveBadge.Parent = titleBar
 
 local lbCorner = Instance.new("UICorner")
 lbCorner.CornerRadius = UDim.new(0, 4)
 lbCorner.Parent = liveBadge
 
--- Body Frame
+-- Body Container
 local bodyFrame = Instance.new("Frame")
-bodyFrame.Size = UDim2.new(1, -16, 1, -34)
-bodyFrame.Position = UDim2.new(0, 8, 0, 30)
+bodyFrame.Size = UDim2.new(1, -16, 1, -40)
+bodyFrame.Position = UDim2.new(0, 8, 0, 36)
 bodyFrame.BackgroundTransparency = 1
 bodyFrame.Parent = hudFrame
 
 -- 1. Automation State Badge
 local hudActionBadge = Instance.new("TextLabel")
-hudActionBadge.Size = UDim2.new(1, 0, 0, 22)
+hudActionBadge.Size = UDim2.new(1, 0, 0, 20)
 hudActionBadge.Position = UDim2.new(0, 0, 0, 0)
-hudActionBadge.BackgroundColor3 = Color3.fromRGB(36, 14, 22)
-hudActionBadge.BackgroundTransparency = 0.3
+hudActionBadge.BackgroundTransparency = 1
 hudActionBadge.Text = "🌾 สถานะ: สแตนด์บาย (Idle)"
-hudActionBadge.TextColor3 = Color3.fromRGB(255, 185, 70)
+hudActionBadge.TextColor3 = COLORS.primary
 hudActionBadge.Font = Enum.Font.GothamBold
 hudActionBadge.TextSize = 11
+hudActionBadge.TextXAlignment = Enum.TextXAlignment.Left
 hudActionBadge.Parent = bodyFrame
-
-local abCorner = Instance.new("UICorner")
-abCorner.CornerRadius = UDim.new(0, 6)
-abCorner.Parent = hudActionBadge
 
 -- 2. Target & Combat Box
 local targetBox = Instance.new("Frame")
 targetBox.Size = UDim2.new(1, 0, 0, 76)
-targetBox.Position = UDim2.new(0, 0, 0, 26)
-targetBox.BackgroundColor3 = Color3.fromRGB(25, 11, 16)
+targetBox.Position = UDim2.new(0, 0, 0, 24)
+targetBox.BackgroundColor3 = Color3.fromRGB(28, 12, 20)
 targetBox.BackgroundTransparency = 0.3
 targetBox.BorderSizePixel = 0
 targetBox.Parent = bodyFrame
 
-local tbCorner = Instance.new("UICorner")
-tbCorner.CornerRadius = UDim.new(0, 6)
-tbCorner.Parent = targetBox
+local tbBoxCorner = Instance.new("UICorner")
+tbBoxCorner.CornerRadius = UDim.new(0, 6)
+tbBoxCorner.Parent = targetBox
 
 local hudTargetName = Instance.new("TextLabel")
-hudTargetName.Size = UDim2.new(1, -12, 0, 18)
+hudTargetName.Size = UDim2.new(1, -12, 0, 16)
 hudTargetName.Position = UDim2.new(0, 6, 0, 4)
 hudTargetName.BackgroundTransparency = 1
 hudTargetName.Text = "🎯 ศัตรูเป้าหมาย: -"
 hudTargetName.TextColor3 = Color3.fromRGB(255, 255, 255)
 hudTargetName.Font = Enum.Font.GothamBold
-hudTargetName.TextSize = 11
+hudTargetName.TextSize = 10.5
 hudTargetName.TextXAlignment = Enum.TextXAlignment.Left
 hudTargetName.Parent = targetBox
 
 local hudHpBarBg = Instance.new("Frame")
-hudHpBarBg.Size = UDim2.new(1, -12, 0, 16)
+hudHpBarBg.Size = UDim2.new(1, -12, 0, 14)
 hudHpBarBg.Position = UDim2.new(0, 6, 0, 24)
-hudHpBarBg.BackgroundColor3 = Color3.fromRGB(20, 9, 13)
+hudHpBarBg.BackgroundColor3 = Color3.fromRGB(45, 20, 30)
 hudHpBarBg.BorderSizePixel = 0
 hudHpBarBg.Parent = targetBox
 
-local hhbCorner = Instance.new("UICorner")
-hhbCorner.CornerRadius = UDim.new(0, 4)
-hhbCorner.Parent = hudHpBarBg
+local hudHpBarCorner = Instance.new("UICorner")
+hudHpBarCorner.CornerRadius = UDim.new(0, 4)
+hudHpBarCorner.Parent = hudHpBarBg
 
 local hudHpBarFill = Instance.new("Frame")
 hudHpBarFill.Size = UDim2.new(0, 0, 1, 0)
-hudHpBarFill.BackgroundColor3 = Color3.fromRGB(46, 224, 140)
+hudHpBarFill.BackgroundColor3 = COLORS.success
 hudHpBarFill.BorderSizePixel = 0
 hudHpBarFill.Parent = hudHpBarBg
 
-local hhfCorner = Instance.new("UICorner")
-hhfCorner.CornerRadius = UDim.new(0, 4)
-hhfCorner.Parent = hudHpBarFill
+local hudHpFillCorner = Instance.new("UICorner")
+hudHpFillCorner.CornerRadius = UDim.new(0, 4)
+hudHpFillCorner.Parent = hudHpBarFill
 
 local hudHpBarText = Instance.new("TextLabel")
 hudHpBarText.Size = UDim2.fromScale(1, 1)
@@ -4106,8 +3901,8 @@ hudHpBarText.BackgroundTransparency = 1
 hudHpBarText.Text = "❤️ HP: -"
 hudHpBarText.TextColor3 = Color3.fromRGB(255, 255, 255)
 hudHpBarText.Font = Enum.Font.GothamBold
-hudHpBarText.TextSize = 10
-hudHpBarText.ZIndex = 3
+hudHpBarText.TextSize = 9
+hudHpBarText.ZIndex = 5
 hudHpBarText.Parent = hudHpBarBg
 
 local hudTargetSub = Instance.new("TextLabel")
@@ -4121,35 +3916,35 @@ hudTargetSub.TextSize = 9.5
 hudTargetSub.TextXAlignment = Enum.TextXAlignment.Left
 hudTargetSub.Parent = targetBox
 
--- 3. Portal & Settlement Status Box
-local portalBox = Instance.new("Frame")
-portalBox.Size = UDim2.new(1, 0, 0, 34)
-portalBox.Position = UDim2.new(0, 0, 0, 106)
-portalBox.BackgroundColor3 = Color3.fromRGB(25, 11, 16)
-portalBox.BackgroundTransparency = 0.3
-portalBox.BorderSizePixel = 0
-portalBox.Parent = bodyFrame
+-- 3. Endless Floor & Card Status Box
+local floorBox = Instance.new("Frame")
+floorBox.Size = UDim2.new(1, 0, 0, 36)
+floorBox.Position = UDim2.new(0, 0, 0, 106)
+floorBox.BackgroundColor3 = Color3.fromRGB(30, 12, 22)
+floorBox.BackgroundTransparency = 0.3
+floorBox.BorderSizePixel = 0
+floorBox.Parent = bodyFrame
 
-local pbCorner = Instance.new("UICorner")
-pbCorner.CornerRadius = UDim.new(0, 6)
-pbCorner.Parent = portalBox
+local fbCorner = Instance.new("UICorner")
+fbCorner.CornerRadius = UDim.new(0, 6)
+fbCorner.Parent = floorBox
 
-local hudPortalText = Instance.new("TextLabel")
-hudPortalText.Size = UDim2.new(1, -12, 1, 0)
-hudPortalText.Position = UDim2.new(0, 6, 0, 0)
-hudPortalText.BackgroundTransparency = 1
-hudPortalText.Text = "🌀 ประตูทางออก: สแกนหา...\n🔄 โหมดหลังจบดัน: กลับล็อบบี้ (Lobby)"
-hudPortalText.TextColor3 = Color3.fromRGB(242, 218, 228)
-hudPortalText.Font = Enum.Font.Gotham
-hudPortalText.TextSize = 9.5
-hudPortalText.TextXAlignment = Enum.TextXAlignment.Left
-hudPortalText.Parent = portalBox
+local hudFloorText = Instance.new("TextLabel")
+hudFloorText.Size = UDim2.new(1, -12, 1, 0)
+hudFloorText.Position = UDim2.new(0, 6, 0, 0)
+hudFloorText.BackgroundTransparency = 1
+hudFloorText.Text = "🏰 ชั้นหอคอย: Floor 1  |  🃏 Auto Card: เปิดใช้งาน\n🔄 โหมดหลังจบดัน: เล่นอีกรอบ (Play Again)"
+hudFloorText.TextColor3 = Color3.fromRGB(255, 210, 230)
+hudFloorText.Font = Enum.Font.Gotham
+hudFloorText.TextSize = 9.5
+hudFloorText.TextXAlignment = Enum.TextXAlignment.Left
+hudFloorText.Parent = floorBox
 
--- 4. Performance & Telemetry Grid Box
+-- 4. Diagnostics & Performance Grid Box
 local diagBox = Instance.new("Frame")
-diagBox.Size = UDim2.new(1, 0, 0, 56)
-diagBox.Position = UDim2.new(0, 0, 0, 144)
-diagBox.BackgroundColor3 = Color3.fromRGB(20, 10, 14)
+diagBox.Size = UDim2.new(1, 0, 0, 52)
+diagBox.Position = UDim2.new(0, 0, 0, 148)
+diagBox.BackgroundColor3 = Color3.fromRGB(25, 10, 18)
 diagBox.BackgroundTransparency = 0.3
 diagBox.BorderSizePixel = 0
 diagBox.Parent = bodyFrame
@@ -4162,8 +3957,8 @@ local hudDiagText = Instance.new("TextLabel")
 hudDiagText.Size = UDim2.new(1, -12, 1, 0)
 hudDiagText.Position = UDim2.new(0, 6, 0, 0)
 hudDiagText.BackgroundTransparency = 1
-hudDiagText.Text = "💓 Ticks: 0  |  🎯 Scans: 0  |  🌀 Portals: 0\n⚡ FPS: --  |  📶 Ping: -- ms  |  ⚠️ Dangers: 0"
-hudDiagText.TextColor3 = Color3.fromRGB(210, 168, 182)
+hudDiagText.Text = "💓 Ticks: 0  |  🎯 Scans: 0  |  🃏 Cards Picked: 0\n⚡ FPS: --  |  📶 Ping: -- ms  |  ⚠️ Dangers: 0"
+hudDiagText.TextColor3 = Color3.fromRGB(220, 175, 195)
 hudDiagText.Font = Enum.Font.Gotham
 hudDiagText.TextSize = 9.5
 hudDiagText.TextXAlignment = Enum.TextXAlignment.Left
@@ -4191,11 +3986,11 @@ end)
 
 -- TAB 5: Live Status (Updated to HUD Toggle & Overview)
 local StatusTab = Window:AddTab({ Title = "📊 สถานะการทำงาน" })
-StatusTab:AddSection("TELEMETRY HUD OVERLAY (ขวาบนของหน้าจอ)")
+StatusTab:AddSection("ENDLESS TOWER TELEMETRY HUD OVERLAY")
 
 StatusTab:AddButton({
     Title = "👁️ เปิด / ปิด Telemetry HUD (มุมขวาบน)",
-    Desc = "สลับการแสดงผลหน้าจอติดตามสถานะมุมขวาบนของหน้าจอ",
+    Desc = "สลับการแสดงผลหน้าจอติดตามสถานะหอคอยมุมขวาบนของหน้าจอ",
     Callback = function()
         hudGui.Enabled = not hudGui.Enabled
     end
@@ -4223,6 +4018,37 @@ local function syncUIElements()
         if ObsidianGlassEngine.Options.SaveSettings then ObsidianGlassEngine.Options.SaveSettings:SetValue(Config.SaveSettings) end
         if ObsidianGlassEngine.Options.Debug then ObsidianGlassEngine.Options.Debug:SetValue(Config.Debug) end
     end)
+end
+
+local function detectCurrentFloor()
+    local fl = nil
+    pcall(function()
+        fl = workspace:GetAttribute("Floor") or workspace:GetAttribute("EndlessFloor") or workspace:GetAttribute("Stage")
+    end)
+    if not fl then
+        pcall(function()
+            fl = player:GetAttribute("EndlessFloor") or player:GetAttribute("Floor") or player:GetAttribute("Stage")
+        end)
+    end
+    if not fl then
+        pcall(function()
+            local pg = player:FindFirstChildOfClass("PlayerGui")
+            if pg then
+                for _, g in ipairs(pg:GetChildren()) do
+                    if g:IsA("ScreenGui") and g.Enabled then
+                        for _, v in ipairs(g:GetDescendants()) do
+                            if v:IsA("TextLabel") and v.Visible and v.Text:find("Floor") then
+                                local num = v.Text:match("Floor%s*(%d+)") or v.Text:match("(%d+)")
+                                if num then fl = tonumber(num) break end
+                            end
+                        end
+                    end
+                    if fl then break end
+                end
+            end
+        end)
+    end
+    return fl or 1
 end
 
 local function updateStatusPanel()
@@ -4278,20 +4104,12 @@ local function updateStatusPanel()
         local badgeColor = COLORS.warning
 
         if actStr == "Farming" then
-            icon = "🌾"
-            actStr = "กำลังฟาร์มมอนสเตอร์ (Farming)"
+            icon = "⚔️"
+            actStr = "กำลังเคลียร์ชั้นมอนสเตอร์ (Farming Floor)"
             badgeColor = COLORS.success
-        elseif actStr == "Clearing" then
-            icon = "🔍"
-            actStr = "รอห้องเคลียร์ / ตรวจมอน (Clearing)"
-            badgeColor = COLORS.warning
-        elseif actStr == "Patrol Scan" then
-            icon = "🗺️"
-            actStr = "วนสแกนทั่วแมพ (Patrol Scan)"
-            badgeColor = COLORS.warning
-        elseif actStr == "Opening Chest" then
-            icon = "📦"
-            actStr = "กำลังเปิดกล่อง (Opening Chest)"
+        elseif actStr == "Selecting Bonus Card" then
+            icon = "🃏"
+            actStr = "กำลังเลือกการ์ดโบนัส (Selecting Card)"
             badgeColor = COLORS.cyan
         elseif actStr == "Triggering Spawn" then
             icon = "⚡"
@@ -4299,19 +4117,15 @@ local function updateStatusPanel()
             badgeColor = COLORS.warning
         elseif actStr == "Portal" or actStr == "Moving To Portal" or actStr == "Entering Portal" then
             icon = "🌀"
-            actStr = "กำลังไปประตูทางออก (Portal Exit)"
-            badgeColor = COLORS.cyan
-        elseif actStr == "Moving To Door" or actStr == "Entering Door" or actStr == "Opening Door" then
-            icon = "🚪"
-            actStr = "กำลังเปิดประตู (Door)"
+            actStr = "กำลังไปประตูขึ้นชั้นถัดไป (Next Floor Exit)"
             badgeColor = COLORS.cyan
         elseif actStr == "Play Again" then
             icon = "🔄"
-            actStr = "จบดัน: กำลังเริ่มเล่นอีกรอบ (Play Again)"
+            actStr = "จบหอคอย: กำลังเริ่มเล่นอีกรอบ (Play Again)"
             badgeColor = COLORS.cyan
         elseif actStr == "Return to Lobby" then
             icon = "🏠"
-            actStr = "จบดัน: กำลังกลับล็อบบี้ (Return Lobby)"
+            actStr = "จบหอคอย: กำลังกลับล็อบบี้ (Return Lobby)"
             badgeColor = COLORS.warning
         elseif actStr == "Recovering" then
             icon = "⚡"
@@ -4321,10 +4135,6 @@ local function updateStatusPanel()
             icon = "🚨"
             actStr = "ถอยหลบฉุกเฉิน (Emergency Escape)"
             badgeColor = COLORS.danger
-        elseif actStr == "Searching Exit" then
-            icon = "🔎"
-            actStr = "ค้นหาทางออก (Searching Exit)"
-            badgeColor = COLORS.warning
         else
             icon = "💤"
             actStr = "สแตนด์บาย (Idle)"
@@ -4334,16 +4144,15 @@ local function updateStatusPanel()
         hudActionBadge.Text = icon .. " " .. actStr
         hudActionBadge.TextColor3 = badgeColor
 
-        local portalDistText = "กำลังสแกน..."
-        if State.Portal and State.Portal.PrimaryPart and State.Root then
-            local distP = (State.Root.Position - State.Portal.PrimaryPart.Position).Magnitude
-            portalDistText = string.format("พบประตู (ระยะ %.1f Studs)", distP)
-        end
-        local afterRunText = Config.AfterRunMode == "Again" and "เล่นอีกรอบ (Again)" or "กลับล็อบบี้ (Lobby)"
-        hudPortalText.Text = string.format("🌀 ประตูทางออก: %s\n🔄 หลังจบดัน: %s", portalDistText, afterRunText)
+        local currentFloor = detectCurrentFloor()
+        local cardStatusText = Config.AutoBonusCard and "เปิดใช้งาน (Auto Card)" or "ปิดใช้งาน"
+        local afterRunText = Config.AfterRunMode == "Again" and "เล่นอีกรอบ (Play Again)" or "กลับล็อบบี้ (Lobby)"
+        hudFloorText.Text = string.format("🏰 ชั้นหอคอย: Floor %s  |  🃏 เลือกการ์ด: %s\n🔄 หลังจบหอคอย: %s",
+            tostring(currentFloor), cardStatusText, afterRunText)
 
-        hudDiagText.Text = string.format("💓 Ticks: %d  |  🎯 Scans: %d  |  🌀 Portals: %d\n⚡ FPS: %d  |  📶 Ping: %d ms  |  ⚠️ Dangers: %d",
-            State.Stats.Heartbeats, State.Stats.TargetScans, State.Stats.PortalScans,
+        local cardsPickedCount = State.Stats and State.Stats.CardsPicked or 0
+        hudDiagText.Text = string.format("💓 Ticks: %d  |  🎯 Scans: %d  |  🃏 Cards Picked: %d\n⚡ FPS: %d  |  📶 Ping: %d ms  |  ⚠️ Dangers: %d",
+            State.Stats.Heartbeats, State.Stats.TargetScans, cardsPickedCount,
             currentFps, currentPing, State.Stats.DangerScans)
     end)
 end
@@ -4352,6 +4161,8 @@ connect(RunService.Heartbeat, function(dt)
     if State.Unloaded then
         return
     end
+
+    checkAutoStartExtraWeapon()
 
     State.Stats.Heartbeats += 1
 
@@ -4366,7 +4177,7 @@ connect(RunService.Heartbeat, function(dt)
             State.SettlementNotified = true
             pcall(function()
                 ObsidianGlassEngine:Notify({
-                    Title = "🏆 จบดันเจี้ยน (VICTORY)!",
+                    Title = "🏆 จบหอคอย (VICTORY)!",
                     Content = (Config.AfterRunMode == "Again")
                         and "ตรวจพบหน้าต่างจบเกม! กำลังกด Play Again (เล่นอีกรอบ) อัตโนมัติ..."
                         or "ตรวจพบหน้าต่างจบเกม! กำลังกด Return to Lobby (กลับล็อบบี้) อัตโนมัติ...",
@@ -4388,10 +4199,7 @@ connect(RunService.Heartbeat, function(dt)
         return
     else
         State.SettlementNotified = false
-        -- clear settlement phase
-        if _G.IronSoul_Phase == "Settlement" then
-            _G.IronSoul_Phase = "LOBBY"
-        end
+        if _G.IronSoul_Phase == "Settlement" then _G.IronSoul_Phase = "LOBBY" end
     end
 
     if not Config.AutoFarm then
@@ -4440,23 +4248,12 @@ connect(RunService.Heartbeat, function(dt)
 
             if model and root and humanoid then
                 State.RoomClearTimer = 0
-                State.RoomClearConfirmTimer = 0
-                State.RoomClearConfirmed = false
             end
         end
     end
 
     if not State.TargetRoot or not targetIsValid() then
         State.RoomClearTimer += dt
-        -- RoomClearConfirmTimer เดินเฉพาะเมื่อ Confirmed = true
-        if State.RoomClearConfirmed then
-            State.RoomClearConfirmTimer += dt
-        end
-    else
-        -- พบมอน → reset ทุก timer
-        State.RoomClearTimer = 0
-        State.RoomClearConfirmTimer = 0
-        State.RoomClearConfirmed = false
     end
 
     if State.FallbackTargetTimer > 0 then
@@ -4496,24 +4293,12 @@ connect(RunService.Heartbeat, function(dt)
                     State.StageBusy = false
                     State.DoorBusy = false
                     State.RoomClearTimer = 0
-                    State.RoomClearConfirmTimer = 0
-                    State.RoomClearConfirmed = false
                     State.CurrentAction = "Recovering"
 
                     if Config.Debug then
                         warn("[IronSoul] stage error:", err)
                     end
                 end
-            end)
-        end
-
-        -- เปิดกล่องหลังห้องเคลียร์
-        if Config.AutoOpenChest
-            and not State.StageBusy
-            and not State.ChestBusy
-            and (not State.TargetRoot or not targetIsValid()) then
-            task.spawn(function()
-                pcall(findAndOpenChests)
             end)
         end
     end
@@ -4538,38 +4323,14 @@ connect(RunService.Heartbeat, function(dt)
         State.CurrentAction = "Farming"
     end
 
-    -- SkillInterval ตอนนี้ทำหน้าที่เป็น min-poll เท่านั้น
-    -- useSkills() ตรวจ cooldown แต่ละ key เอง
     State.SkillTimer += dt
 
-    if State.SkillTimer >= 0.15 then   -- poll ทุก 150ms
+    if State.SkillTimer >= Config.SkillInterval then
         State.SkillTimer = 0
 
-        if Config.AutoSkill and targetIsValid() and not State.StageBusy then
+        if Config.AutoSkill and targetIsValid() then
             task.spawn(useSkills)
         end
-    end
-
-    -- Portal stuck detector: ถ้าอยู่หน้าวาปนาน > PortalStuckTimeout
-    -- แต่ยังเข้าไม่ได้ → teleport เข้าโดยตรง
-    if State.Portal and State.Portal.Parent and State.Root then
-        local pPos = State.Portal.Position
-        local dSq  = (State.Root.Position - pPos)
-        if dSq:Dot(dSq) < 30 * 30 then
-            State.PortalStuckTimer += dt
-            if State.PortalStuckTimer >= Config.PortalStuckTimeout and not State.StageBusy then
-                State.PortalStuckTimer = 0
-                pcall(function()
-                    -- nudge เข้าตรงๆ
-                    State.Root.CFrame = CFrame.new(pPos)
-                    State.Root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                end)
-            end
-        else
-            State.PortalStuckTimer = 0
-        end
-    else
-        State.PortalStuckTimer = 0
     end
 end)
 
@@ -4586,9 +4347,11 @@ local function unload()
     disconnectList(Connections)
 
     pcall(function()
-        local pGui = GetSafeParentGui()
-        if pGui:FindFirstChild("IronSoul_TopRightHUD") then
-            pGui.IronSoul_TopRightHUD:Destroy()
+        if hudGui then hudGui:Destroy() end
+        local pGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        if not pGui then pGui = playerGui end
+        if pGui:FindFirstChild("IronSoul_EndlessTopRightHUD") then
+            pGui.IronSoul_EndlessTopRightHUD:Destroy()
         end
         if pGui:FindFirstChild("ObsidianGlass2_UI") then
             pGui.ObsidianGlass2_UI:Destroy()
@@ -4611,13 +4374,126 @@ end
 
 _G.IronSoulUnload = unload
 
+-- ════════════════════════════════════════
+-- ENDLESS TOWER — AUTONOMOUS SYSTEMS
+-- 1) Auto-click Start on weapon select screen
+-- 2) Auto-pick power card every 5 floors
+-- ════════════════════════════════════════
+
+-- หาและคลิก button ตาม keyword list
+local function clickFirstVisible(keywords)
+    for _, child in ipairs(playerGui:GetDescendants()) do
+        if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
+            local combined = string.lower(
+                child.Name .. (child:IsA("TextButton") and child.Text or "")
+            )
+            for _, kw in ipairs(keywords) do
+                if combined:find(kw, 1, true) then
+                    pcall(function() child:Activate() end)
+                    pcall(function()
+                        local vum = game:GetService("VirtualInputManager")
+                        local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                        vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                        task.wait(0.05)
+                        vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                    end)
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- พาวเยอร์หน้าเลือกอาวุธ (Start screen) สังเกตจาก button "Start" / "เริ่ม"
+local _startScreenHandled = false
+task.spawn(function()
+    task.wait(3) -- รอ GUI โหลด
+    while not State.Unloaded do
+        if not _startScreenHandled then
+            local clicked = clickFirstVisible({"start", "เริ่ม", "begin", "ready"})
+            if clicked then
+                _startScreenHandled = true
+                ObsidianGlassEngine:Notify({
+                    Title = "Endless Tower",
+                    Content = "กดปุ่ม Start อัตโนมัติแล้ว!",
+                    Duration = 3
+                })
+            end
+        end
+        task.wait(1.5)
+    end
+end)
+
+-- Power card selector ทุก 5 ชั้น: ตรวจหน้าต่างเลือกพลัง และคลิกตัวแรก
+local _lastPowerPickTime = 0
+task.spawn(function()
+    while not State.Unloaded do
+        task.wait(1)
+        -- ตรวจหน้าต่างเลือกพลัง (ScreenPowerSelect / PowerCard / FloorReward)
+        local powerGui = playerGui:FindFirstChild("ScreenPowerSelect")
+            or playerGui:FindFirstChild("PowerSelect")
+            or playerGui:FindFirstChild("FloorReward")
+            or playerGui:FindFirstChild("SkillSelect")
+        local hasPowerScreen = powerGui and (
+            (powerGui:IsA("ScreenGui") and powerGui.Enabled) or
+            (powerGui:IsA("GuiObject") and powerGui.Visible)
+        )
+        -- Fallback: หา button ที่มีคำว่า power/skill/ability
+        if not hasPowerScreen then
+            for _, child in ipairs(playerGui:GetDescendants()) do
+                if (child:IsA("Frame") or child:IsA("ScreenGui")) and child.Visible then
+                    local n = string.lower(child.Name)
+                    if n:find("power") or n:find("skill") or n:find("ability") or n:find("reward") then
+                        hasPowerScreen = true; break
+                    end
+                end
+            end
+        end
+        if hasPowerScreen and (tick() - _lastPowerPickTime) > 3 then
+            _lastPowerPickTime = tick()
+            -- คลิกตัวเลือกแรกที่เจอ
+            local picked = false
+            for _, child in ipairs(playerGui:GetDescendants()) do
+                if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible and child.Active then
+                    local n = string.lower(child.Name)
+                    local t = child:IsA("TextButton") and string.lower(child.Text) or ""
+                    -- เลือกปุ่มที่เป็น card/option ไม่ใช่ close/back
+                    if not (n:find("close") or n:find("back") or n:find("cancel") or t:find("back") or t:find("close")) then
+                        if n:find("card") or n:find("power") or n:find("skill") or n:find("choice") or n:find("option")
+                            or t:find("select") or t:find("choose") or t:find("เลือก") then
+                            pcall(function() child:Activate() end)
+                            pcall(function()
+                                local vum = game:GetService("VirtualInputManager")
+                                local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+                                vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+                                task.wait(0.05)
+                                vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+                            end)
+                            picked = true
+                            break
+                        end
+                    end
+                end
+            end
+            if picked then
+                ObsidianGlassEngine:Notify({
+                    Title = "Endless Tower",
+                    Content = "เลือกพลังพิเศษอัตโนมัติแล้ว!",
+                    Duration = 3
+                })
+            end
+        end
+    end
+end)
+
 syncUIElements()
 updateStatusPanel()
 
 ObsidianGlassEngine:Notify({
     Title = "Iron Soul Engine",
-    Content = "โหลด Obsidian Glassmorphic 2 UI (ภาษาไทย) เรียบร้อยแล้ว!",
+    Content = "โหลด Endless Tower Engine เรียบร้อยแล้ว!",
     Duration = 4
 })
 
-print("[IronSoul] Loaded with Obsidian Glassmorphic 2 Engine (Thai Localized)")
+print("[IronSoul] Endless Tower Engine Loaded")
