@@ -152,48 +152,6 @@ local function loadCustomAvatarImage()
     return customAvatarAsset
 end
 
-local customIntroLogoAsset = nil
-local isDownloadingIntroLogo = false
-
-local function loadIntroLogoImage()
-    if customIntroLogoAsset then return customIntroLogoAsset end
-    local logoUrl = "https://raw.githubusercontent.com/aslamdunk7/PayomboyZKnowledge/main/nobg_Gemini_Generated_Image_mgkp6ymgkp6ymgkp.png"
-    local fileName = "payomboyz_intro_logo.png"
-    
-    pcall(function()
-        if typeof(isfile) == "function" and isfile(fileName) then
-            if typeof(getcustomasset) == "function" or typeof(getsynasset) == "function" then
-                local getAsset = getcustomasset or getsynasset
-                customIntroLogoAsset = getAsset(fileName)
-            end
-        end
-    end)
-
-    if not customIntroLogoAsset and not isDownloadingIntroLogo then
-        isDownloadingIntroLogo = true
-        task.spawn(function()
-            pcall(function()
-                if typeof(writefile) == "function" and (typeof(getcustomasset) == "function" or typeof(getsynasset) == "function") then
-                    local getAsset = getcustomasset or getsynasset
-                    local imageBytes = game:HttpGet(logoUrl)
-                    if imageBytes and #imageBytes > 0 then
-                        writefile(fileName, imageBytes)
-                        if typeof(isfile) == "function" and isfile(fileName) then
-                            customIntroLogoAsset = getAsset(fileName)
-                        end
-                    end
-                end
-            end)
-            isDownloadingIntroLogo = false
-        end)
-    end
-
-    if not customIntroLogoAsset then
-        customIntroLogoAsset = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
-    end
-    return customIntroLogoAsset
-end
-
 -- ============================================================================
 -- 🔴 LOGOUT & CREDENTIAL CLEARING ENGINE
 -- ============================================================================
@@ -354,11 +312,11 @@ function ObsidianGlassEngine:CreateWindow(cfg)
 
     local shell = Instance.new("Frame")
     shell.Name = "MainShell"
-    shell.Size = UDim2.fromOffset(520, 150)
+    shell.Size = UDim2.fromOffset(920, 600)
     shell.AnchorPoint = Vector2.new(0.5, 0.5)
     shell.Position = UDim2.new(0.5, 0, 0.5, 0)
-    shell.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    shell.BackgroundTransparency = 0.92
+    shell.BackgroundColor3 = COLORS.shell
+    shell.BackgroundTransparency = 0.20
     shell.BorderSizePixel = 0
     shell.ClipsDescendants = true
     shell.Parent = gui
@@ -368,75 +326,17 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     shellCorner.Parent = shell
 
     local shellStroke = Instance.new("UIStroke")
-    shellStroke.Color = Color3.fromRGB(255, 255, 255)
+    shellStroke.Color = COLORS.cyan
     shellStroke.Thickness = 1.5
-    shellStroke.Transparency = 0.4
+    shellStroke.Transparency = 0.3
     shellStroke.Parent = shell
-
-    -- 🌟 INTRO OVERLAY CONTAINER ("PAYOMBØYZ HUB" WITH GOTHIC STYLING & BIG LOGO)
-    local introOverlay = Instance.new("Frame")
-    introOverlay.Name = "IntroOverlay"
-    introOverlay.Size = UDim2.fromScale(1, 1)
-    introOverlay.BackgroundTransparency = 1
-    introOverlay.ZIndex = 999
-    introOverlay.Parent = shell
-
-    local introLogo = Instance.new("ImageLabel")
-    introLogo.Name = "IntroLogo"
-    introLogo.Size = UDim2.fromOffset(115, 115)
-    introLogo.Position = UDim2.new(0, 24, 0.5, -57.5)
-    introLogo.BackgroundTransparency = 1
-    introLogo.Image = loadIntroLogoImage()
-    introLogo.ImageTransparency = 1
-    introLogo.ZIndex = 1000
-    introLogo.Parent = introOverlay
-
-    local introTitle = Instance.new("TextLabel")
-    introTitle.Size = UDim2.new(1, -160, 0, 36)
-    introTitle.Position = UDim2.new(0, 150, 0.5, -26)
-    introTitle.BackgroundTransparency = 1
-    introTitle.Text = "PAYOMBØYZ HUB"
-    introTitle.TextColor3 = Color3.fromRGB(255, 35, 60)
-    introTitle.Font = Enum.Font.Fondamento
-    introTitle.TextSize = 28
-    introTitle.TextXAlignment = Enum.TextXAlignment.Left
-    introTitle.TextTransparency = 1
-    introTitle.ZIndex = 1000
-    introTitle.Parent = introOverlay
-
-    local titleStroke = Instance.new("UIStroke")
-    titleStroke.Color = Color3.fromRGB(80, 0, 15)
-    titleStroke.Thickness = 1.8
-    titleStroke.Parent = introTitle
-
-    local introSub = Instance.new("TextLabel")
-    introSub.Size = UDim2.new(1, -160, 0, 18)
-    introSub.Position = UDim2.new(0, 150, 0.5, 14)
-    introSub.BackgroundTransparency = 1
-    introSub.Text = "LOADING OBSIDIAN V2 ENGINE..."
-    introSub.TextColor3 = Color3.fromRGB(240, 240, 245)
-    introSub.Font = Enum.Font.GothamBold
-    introSub.TextSize = 11
-    introSub.TextXAlignment = Enum.TextXAlignment.Left
-    introSub.TextTransparency = 1
-    introSub.ZIndex = 1000
-    introSub.Parent = introOverlay
-
-    -- 📦 MAIN CONTENT CONTAINER (CONTAINING USER PANEL & MAIN PANEL)
-    local mainContent = Instance.new("Frame")
-    mainContent.Name = "MainContentContainer"
-    mainContent.Size = UDim2.fromScale(1, 1)
-    mainContent.BackgroundTransparency = 1
-    mainContent.Visible = false
-    mainContent.ZIndex = 3
-    mainContent.Parent = shell
 
     local snowLayer = Instance.new("Frame")
     snowLayer.Name = "SnowLayer"
     snowLayer.Size = UDim2.fromScale(1, 1)
     snowLayer.BackgroundTransparency = 1
     snowLayer.ZIndex = 2
-    snowLayer.Parent = mainContent
+    snowLayer.Parent = shell
 
     task.spawn(function()
         local dots = {}
@@ -683,7 +583,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     userPanel.BackgroundTransparency = 0.20
     userPanel.BorderSizePixel = 0
     userPanel.ZIndex = 5
-    userPanel.Parent = mainContent
+    userPanel.Parent = shell
 
     local userDiv = Instance.new("Frame")
     userDiv.Size = UDim2.new(0, 1, 1, 0)
@@ -800,7 +700,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         performLogoutKeyClear()
         if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
         end)
     end)
 
@@ -907,7 +807,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
     mainPanel.Position = UDim2.new(0, 240, 0, 0)
     mainPanel.BackgroundTransparency = 1
     mainPanel.ZIndex = 5
-    mainPanel.Parent = mainContent
+    mainPanel.Parent = shell
 
     local headerBar = Instance.new("Frame")
     headerBar.Size = UDim2.new(1, 0, 0, 48)
@@ -1940,45 +1840,6 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         end
     end)
 
-    -- 🎬 RUN PAYOMBOYZ HUB INTRO ANIMATION SEQUENCE WITH LOGO & SMOOTH MORPH
-    task.spawn(function()
-        local TweenService = game:GetService("TweenService")
-        
-        -- Phase 1: Fade In Logo & Gothic Text
-        local fadeInInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-        TweenService:Create(introLogo, fadeInInfo, { ImageTransparency = 0 }):Play()
-        TweenService:Create(introTitle, fadeInInfo, { TextTransparency = 0 }):Play()
-        TweenService:Create(introSub, fadeInInfo, { TextTransparency = 0.2 }):Play()
-        
-        task.wait(1.5)
-        
-        -- Phase 2: Fade Out Logo & Text
-        local fadeOutInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-        TweenService:Create(introLogo, fadeOutInfo, { ImageTransparency = 1 }):Play()
-        TweenService:Create(introTitle, fadeOutInfo, { TextTransparency = 1 }):Play()
-        TweenService:Create(introSub, fadeOutInfo, { TextTransparency = 1 }):Play()
-        
-        task.wait(0.35)
-        introOverlay.Visible = false
-        
-        -- Phase 3: Expand MainShell & Morph Background Color (White 0.92 -> Dark 0.20)
-        local expandInfo = TweenInfo.new(0.65, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
-        TweenService:Create(shell, expandInfo, {
-            Size = UDim2.fromOffset(920, 600),
-            BackgroundColor3 = COLORS.shell,
-            BackgroundTransparency = 0.20
-        }):Play()
-        TweenService:Create(shellStroke, expandInfo, {
-            Color = COLORS.cyan,
-            Transparency = 0.3
-        }):Play()
-        
-        task.wait(0.65)
-        
-        -- Phase 4: Reveal Main UI Content
-        mainContent.Visible = true
-    end)
-
     return WindowObj
 end
 
@@ -2132,6 +1993,7 @@ local Tabs = {
     Clone = Window:AddTab({ Title = "เครื่องโคลน (Clone Machine)", Icon = "copy" }),
     Trait = Window:AddTab({ Title = "ปรับแต่ง Trait (Trait Machine)", Icon = "sparkles" }),
     AutoSell = Window:AddTab({ Title = "ออโต้ขายยูนิต (Auto Sell)", Icon = "trash-2" }),
+    MysteryShop = Window:AddTab({ Title = "ร้านค้าลึกลับ (Mystery Shop)", Icon = "shopping-cart" }),
     Misc = Window:AddTab({ Title = "ฟังชั่นอื่นๆ (Misc)", Icon = "grid" }),
     Upgrade = Window:AddTab({ Title = "อัปเกรด (Upgrade)", Icon = "trending-up" }),
     Settings = Window:AddTab({ Title = "ตั้งค่า", Icon = "settings" })
@@ -2350,9 +2212,11 @@ end
 
 local function stopFight()
     pcall(function()
-        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
-        if fightStartRemote then
-            safeFireRemote(fightStartRemote, "Stop")
+        -- [FIX] MCP-verified: Fight folder has 'Startxx' (RemoteEvent) + 'Start' (UnreliableRemoteEvent)
+        local fightRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Startxx")
+                         or safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        if fightRemote then
+            safeFireRemote(fightRemote, "Stop")
         end
     end)
     pcall(function()
@@ -2386,7 +2250,9 @@ local function runEquipBestSequence()
     task.spawn(function()
         local doStart = Options and Options.AutoStartFight and Options.AutoStartFight.Value
         local doAutoPlay = Options and Options.AutoPlayMode and Options.AutoPlayMode.Value
-        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        -- [FIX] MCP-verified: Fight remote is 'Startxx' not 'Start'
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Startxx")
+                              or safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
 
         -- Step 1: Stop fight first so units can be swapped safely
         stopFight()
@@ -2798,9 +2664,23 @@ local function getMutationValues()
     return orderedValues
 end
 
-local RarityValues = getRarityValues()
-local CharacterValues = getCharacterValues()
-local MutationValues = getMutationValues()
+-- [FIX] Wrap these in pcall to prevent blocking/freezing during script load
+-- (require() inside these functions can block if modules haven't replicated yet)
+local RarityValues = {}
+local CharacterValues = {}
+local MutationValues = {}
+pcall(function() RarityValues = getRarityValues() end)
+pcall(function() CharacterValues = getCharacterValues() end)
+pcall(function() MutationValues = getMutationValues() end)
+if #RarityValues == 0 then
+    for _, r in ipairs(RarityFallbackValues) do table.insert(RarityValues, r) end
+end
+if #CharacterValues == 0 then
+    for _, c in ipairs(CharacterFallbackValues) do table.insert(CharacterValues, c) end
+end
+if #MutationValues == 0 then
+    for _, m in ipairs(MutationFallbackValues) do table.insert(MutationValues, m) end
+end
 
 local targetConfig = {}
 
@@ -2915,7 +2795,6 @@ local function scanAndExecuteAutoSell()
                 rName = rName:gsub("<.->", ""):match("^%s*(.-)%s*$")
                 if rName and rName ~= "" then
                     local lowerName = rName:lower()
-                    -- MANDATORY SAFETY GUARD: Never allow Secret or Limited to be auto-sold!
                     if lowerName ~= "secret" and lowerName ~= "limited" then
                         activeRaritySet[lowerName] = true
                         hasSelectedRarity = true
@@ -2925,11 +2804,11 @@ local function scanAndExecuteAutoSell()
         end
     end
 
-    -- If no valid rarity is selected in dropdown, DO NOT SEND ANY SELL REQUESTS AT ALL!
     if not hasSelectedRarity then
         return 0
     end
 
+    -- [FIX] Declare sellRemote ONCE here at top scope
     local sellRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Sell")
                     or safeFindPath(ReplicatedStorage, "Remotes", "Sell")
                     or ReplicatedStorage:FindFirstChild("Sell", true)
@@ -2995,7 +2874,6 @@ local function scanAndExecuteAutoSell()
 
     local sellUUIDs = {}
 
-    -- Primary: Query DataService Inventory directly for exact unit data & rarity
     pcall(function()
         local dsModule = safeFindPath(ReplicatedStorage, "Data", "DataService")
         local ds = dsModule and require(dsModule)
@@ -3022,7 +2900,6 @@ local function scanAndExecuteAutoSell()
         end
     end)
 
-    -- Fallback GUI / Backpack scan if DataService was not available or returned no items
     if #sellUUIDs == 0 then
         local seenUUIDs = {}
         local invSlots = safeFindPath(playerGui, "MainUI", "Frames", "Animes", "Frame", "Main", "ScrollingFrame")
@@ -3086,7 +2963,6 @@ local function scanAndExecuteAutoSell()
         return 0
     end
 
-    -- Step 1: Remove units from Hotbar if they are currently set in hotbar slots
     local updateHotbarRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "UpdateInventory")
     if updateHotbarRemote then
         for _, uuid in ipairs(sellUUIDs) do
@@ -3096,11 +2972,7 @@ local function scanAndExecuteAutoSell()
         end
     end
 
-    -- Step 2: Execute Sell Remote (Format: FireServer({ uuid1, uuid2, ... }))
-    local sellRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Sell")
-                    or safeFindPath(ReplicatedStorage, "Remotes", "Sell")
-                    or ReplicatedStorage:FindFirstChild("Sell", true)
-
+    -- Step 2: Execute Sell Remote using the one declared at function top
     if sellRemote then
         safeFireRemote(sellRemote, sellUUIDs)
     end
@@ -4341,7 +4213,9 @@ task.spawn(function()
             continue
         end
 
-        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        -- [FIX] MCP-verified: Fight folder has 'Startxx' (RemoteEvent for server) + 'Start' (UnreliableRemoteEvent)
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Startxx")
+                              or safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
         local myPlot = getBestPlot()
         local currentWave = getGameWave()
         local playing = myPlot and isGamePlaying(myPlot) or false
@@ -4657,7 +4531,9 @@ task.spawn(function()
         if not doRaid then continue end
 
         local raidRemote = safeFindPath(ReplicatedStorage, "Remotes", "Raids", "Request")
-        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
+        -- [FIX] MCP-verified: Fight folder has 'Startxx' (RemoteEvent for server)
+        local fightStartRemote = safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Startxx")
+                              or safeFindPath(ReplicatedStorage, "Remotes", "Fight", "Start")
 
         -- 1. Check Raid Notifications / Frame visibility in PlayerGui
         local raidsFrames = safeFindPath(playerGui, "MainUI", "Frames", "Raids")
@@ -4903,7 +4779,137 @@ task.spawn(function()
     end
 end)
 
--- Optimized & Throttled Auto Roll / Buy System
+-- =============================================================================
+-- ⚡ DIRECT REMOTE AUTO ROLL / BUY SYSTEM (NO PROXIMITY PROMPT - WORKS FROM ANYWHERE)
+-- MCP-verified remotes: Characters.Roll (FireServer) → replies [{Name,Rarity,Price,Mutation,Purchased}x3]
+--                       Characters.Buy (FireServer(unitName)) → buys by Name
+-- =============================================================================
+task.spawn(function()
+    task.wait(2.0)
+
+    local rollRemote = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Roll")
+    local buyRemote  = safeFindPath(ReplicatedStorage, "Remotes", "Characters", "Buy")
+
+    -- Cache latest rolled units from server reply
+    local currentRolledUnits = {}  -- { {Name, Rarity, Price, Mutation, Purchased} }
+    local lastRollTime = 0
+
+    -- Connect to Roll reply (server sends back rolled units as arg 3)
+    if rollRemote and rollRemote:IsA("RemoteEvent") then
+        rollRemote.OnClientEvent:Connect(function(ownerName, plotName, units, slotCount, wave)
+            if type(units) == "table" and #units > 0 then
+                currentRolledUnits = units
+                -- Auto-buy pass: immediately check if any unit matches target
+                if not (Options.AutoBuyPlot and Options.AutoBuyPlot.Value) then return end
+                if not isUiInitialized then return end
+                if not buyRemote then return end
+
+                task.spawn(function()
+                    local cash = readCash() or 0
+                    for _, unit in ipairs(units) do
+                        if unit.Purchased then continue end
+                        -- Check if matches target config
+                        local matched = false
+                        local unitName = unit.Name or ""
+                        local unitRarity = unit.Rarity or ""
+                        local unitMutation = unit.Mutation or "Normal"
+
+                        local function normKey(s) return tostring(s or ""):lower():gsub("%s+","") end
+
+                        if type(targetConfig) == "table" and #targetConfig > 0 then
+                            for _, cfg in ipairs(targetConfig) do
+                                local cfgMutation = normKey(cfg.Mutation or "Normal")
+                                local unitMut = normKey(unitMutation)
+                                -- Accept if mutation matches OR config is Normal (buy regardless of mutation)
+                                local mutOk = (cfgMutation == unitMut) or (cfgMutation == "normal")
+                                if not mutOk then continue end
+
+                                if cfg.Mode == "Rarity" and normKey(cfg.Value) == normKey(unitRarity) then
+                                    matched = true; break
+                                elseif cfg.Mode == "Name" and normKey(cfg.Value) == normKey(unitName) then
+                                    matched = true; break
+                                end
+                            end
+                        else
+                            -- No target set: buy the most expensive / best rarity
+                            matched = true
+                        end
+
+                        if matched and (unit.Price or 0) <= cash then
+                            cash = cash - (unit.Price or 0)
+                            pcall(function()
+                                buyRemote:FireServer(unitName)
+                            end)
+                            task.wait(0.15)
+
+                            -- Discord webhook notify on high rarity
+                            pcall(function()
+                                local notifyRarities = Options.WebhookNotifyRarity and Options.WebhookNotifyRarity.Value or {}
+                                local lowerR = unitRarity:lower()
+                                local shouldNotify = false
+                                if type(notifyRarities) == "table" then
+                                    for k,v in pairs(notifyRarities) do
+                                        if (type(k)=="string" and k:lower()==lowerR and v==true)
+                                        or (type(v)=="string" and v:lower()==lowerR) then
+                                            shouldNotify = true; break
+                                        end
+                                    end
+                                end
+                                if shouldNotify then
+                                    sendDiscordWebhook("🎰 Roll Hit! " .. unitRarity, "ได้ยูนิตระดับ " .. unitRarity .. "!", 16766720, {
+                                        { name = "👤 ผู้เล่น", value = player.Name, inline = true },
+                                        { name = "⚔️ ยูนิต", value = unitName, inline = true },
+                                        { name = "✨ Mutation", value = unitMutation, inline = true },
+                                        { name = "💰 ราคา", value = tostring(unit.Price), inline = true },
+                                    })
+                                end
+                            end)
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+
+    -- Main loop: fires Roll remote at set interval (no proximity prompt needed!)
+    while true do
+        local delayTime = math.max((Options.RollDelay and tonumber(Options.RollDelay.Value)) or 2.0, 0.5)
+
+        if not (Options.AutoBuyPlot and Options.AutoBuyPlot.Value) or not isUiInitialized then
+            task.wait(0.5)
+            continue
+        end
+
+        -- [KEY FIX] Fire Roll remote directly - works from ANY distance (no ProximityPrompt needed)
+        if rollRemote and rollRemote:IsA("RemoteEvent") then
+            lastRollTime = tick()
+            pcall(function()
+                rollRemote:FireServer()
+            end)
+        else
+            -- Fallback: try ProximityPrompt if remote not found
+            local myPlot = getBestPlot()
+            if myPlot then
+                local rollBtn = myPlot:FindFirstChild("Roll", true)
+                local prompt = rollBtn and rollBtn:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then
+                    pcall(function()
+                        prompt.HoldDuration = 0
+                        prompt.MaxActivationDistance = 9999999
+                        prompt.RequiresLineOfSight = false
+                        if fireproximityprompt then
+                            fireproximityprompt(prompt, 0)
+                            fireproximityprompt(prompt, 1)
+                            fireproximityprompt(prompt)
+                        end
+                    end)
+                end
+            end
+        end
+
+        task.wait(delayTime)
+    end
+end)
 task.spawn(function()
     player.CharacterAdded:Connect(function(newChar)
         character = newChar
@@ -5322,14 +5328,590 @@ task.spawn(function()
     end
 end)
 
--- ===== THROTTLED AUTO SELL UNITS THREAD =====
+-- ===== THROTTLED AUTO SELL UNITS THREAD (FIXED) =====
 task.spawn(function()
+    task.wait(2.0) -- Wait for UI to fully initialize first
     while true do
-        local delayVal = (Options.AutoSellDelay and tonumber(Options.AutoSellDelay.Value)) or 2.0
+        local delayVal = math.max((Options.AutoSellDelay and tonumber(Options.AutoSellDelay.Value)) or 2.0, 0.5)
         task.wait(delayVal)
 
-        if Options.AutoSellToggle and Options.AutoSellToggle.Value == true then
-            pcall(scanAndExecuteAutoSell)
+        -- [FIX] Added isUiInitialized guard + explicit true check to ensure toggle works correctly
+        if isUiInitialized and Options.AutoSellToggle and Options.AutoSellToggle.Value == true then
+            local ok, count = pcall(scanAndExecuteAutoSell)
+            if ok and count and count > 0 then
+                pcall(function()
+                    Fluent:Notify({
+                        Title = "Auto Sell 💰",
+                        Content = "ขายยูนิต " .. tostring(count) .. " ตัวเรียบร้อยแล้ว!",
+                        Duration = 3
+                    })
+                end)
+            end
+        end
+    end
+end)
+
+-- ============================================================================
+-- 🏪 AUTO BUY MYSTERY SHOP SYSTEM (ออโต้ซื้อร้านค้าลึกลับ - ทุก 20 นาที)
+-- ============================================================================
+
+Tabs.MysteryShop:AddSection("ร้านค้าลึกลับ (Mystery Shop) - เปิดทุก 20 นาที")
+
+Tabs.MysteryShop:AddParagraph({
+    Title = "💡 วิธีใช้งาน Mystery Shop",
+    Description = "ร้านค้าลึกลับจะเปิดทุก 20 นาที ระบบจะตรวจเช็คและซื้อไอเทมตามที่ตั้งค่าไว้อัตโนมัติ ระบบจะแจ้งเตือนเมื่อร้านเปิดและเมื่อซื้อสำเร็จ"
+})
+
+local AutoBuyMysteryShop = Tabs.MysteryShop:AddToggle("AutoBuyMysteryShop", {
+    Title = "Auto Buy Mystery Shop",
+    Description = "เปิดระบบออโต้ซื้อร้านค้าลึกลับอัตโนมัติเมื่อร้านเปิด (ทุก 20 นาที)",
+    Default = false,
+})
+
+local MysteryShopBuyAll = Tabs.MysteryShop:AddToggle("MysteryShopBuyAll", {
+    Title = "ซื้อทุกไอเทมในร้าน (Buy All Items)",
+    Description = "ซื้อไอเทมทุกชิ้นในร้านค้าลึกลับเมื่อตรวจพบร้านเปิด",
+    Default = true,
+})
+
+local MysteryShopBuyRarities = Tabs.MysteryShop:AddDropdown("MysteryShopBuyRarities", {
+    Title = "Rarity ที่ต้องการซื้อ (Buy Rarities Filter)",
+    Description = "เลือก Rarity ที่ต้องการให้ระบบซื้ออัตโนมัติ (ต้องปิด Buy All ก่อน)",
+    Values = RarityValues,
+    Multi = true,
+    Default = { Legendary = true, Mythic = true, God = true, Secret = true },
+})
+
+local MysteryShopMaxSpend = Tabs.MysteryShop:AddSlider("MysteryShopMaxSpend", {
+    Title = "ขีดจำกัดเงินที่ใช้ต่อรอบ (Max Gold Per Round)",
+    Description = "ระบบจะไม่ซื้อถ้าราคาเกินค่านี้ (ใส่ 0 = ไม่จำกัด)",
+    Default = 0,
+    Min = 0,
+    Max = 10000000,
+    Rounding = 0,
+})
+
+local mysteryShopCountdown = 0
+local mysteryShopNextOpen = 0
+
+local mysteryShopTimerLabel = Tabs.MysteryShop:AddParagraph({
+    Title = "⏱️ นับถอยหลังรอบถัดไป (Next Shop Timer)",
+    Description = "รอการตรวจสอบ...",
+})
+
+Tabs.MysteryShop:AddButton({
+    Title = "🛒 ซื้อไอเทมร้านลึกลับทันที (Buy Mystery Shop Now)",
+    Description = "สั่งให้ระบบตรวจเช็คและซื้อไอเทมในร้านค้าลึกลับทันที 1 ครั้ง",
+    Callback = function()
+        pcall(function()
+            -- Try to find and interact with mystery shop
+            local shopRemote = safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Buy")
+                            or safeFindPath(ReplicatedStorage, "Remotes", "Shop", "Buy")
+                            or safeFindPath(ReplicatedStorage, "Remotes", "Mystery", "Buy")
+                            or safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Purchase")
+                            or safeFindPath(ReplicatedStorage, "Remotes", "Shop", "Purchase")
+
+            local shopFrame = safeFindPath(playerGui, "MainUI", "Frames", "MysteryShop")
+                           or safeFindPath(playerGui, "MainUI", "Frames", "Mystery")
+                           or playerGui:FindFirstChild("MysteryShop", true)
+
+            local bought = 0
+
+            -- 1. Try Remote firing
+            if shopRemote then
+                safeFireRemote(shopRemote, "BuyAll")
+                safeFireRemote(shopRemote, "All")
+                bought = bought + 1
+            end
+
+            -- 2. Try UI interaction (find buy buttons)
+            if shopFrame then
+                for _, desc in ipairs(shopFrame:GetDescendants()) do
+                    if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+                        local n = desc.Name:lower()
+                        if n:find("buy") or n:find("purchase") or n:find("get") then
+                            if firesignal then
+                                pcall(function() firesignal(desc.MouseButton1Click) end)
+                            elseif firebutton then
+                                pcall(function() firebutton(desc) end)
+                            end
+                            task.wait(0.15)
+                            bought = bought + 1
+                        end
+                    end
+                end
+            end
+
+            Fluent:Notify({
+                Title = "Mystery Shop 🏪",
+                Content = bought > 0 and "ส่งคำสั่งซื้อร้านค้าลึกลับเรียบร้อย (" .. tostring(bought) .. " คำสั่ง)!" or "ไม่พบร้านค้าลึกลับที่เปิดอยู่ในขณะนี้",
+                Duration = 4
+            })
+        end)
+    end
+})
+
+Tabs.MysteryShop:AddButton({
+    Title = "🔄 รีเฟรชร้านค้าลึกลับ (Refresh Mystery Shop)",
+    Description = "ส่งคำสั่ง Refresh เพื่ออัปเดตสถานะร้านค้าลึกลับ",
+    Callback = function()
+        pcall(function()
+            local refreshRemote = safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Refresh")
+                                or safeFindPath(ReplicatedStorage, "Remotes", "Shop", "Refresh")
+                                or safeFindPath(ReplicatedStorage, "Remotes", "Mystery", "Refresh")
+            if refreshRemote then
+                safeFireRemote(refreshRemote, "Refresh")
+                Fluent:Notify({
+                    Title = "Mystery Shop 🏪",
+                    Content = "ส่งคำสั่ง Refresh ร้านค้าลึกลับเรียบร้อย!",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "Mystery Shop 🏪",
+                    Content = "ไม่พบ Remote สำหรับ Refresh ร้านค้าลึกลับ",
+                    Duration = 3
+                })
+            end
+        end)
+    end
+})
+
+-- ===== AUTO BUY MYSTERY SHOP ENGINE (MCP-VERIFIED: Trader.GetStock + Trader.Buy) =====
+task.spawn(function()
+    task.wait(3.0)
+
+    -- [MCP-VERIFIED] Remotes:
+    --   Trader.GetStock  = RemoteFunction → InvokeServer() → {Items=[{Name,Price,Rarity,Stock,MaxStock,DisplayName,Image}], EventId, EventEndsAt}
+    --   Trader.Buy       = RemoteEvent    → FireServer(itemName) → buys 1 unit of that item
+    local MYSTERY_SHOP_INTERVAL = 1200 -- 20 minutes
+    local lastShopBuyTime = 0
+    local lastShopCheckTime = 0
+    local lastStockCheck = 0
+    local shopWasOpen = false
+    local nextShopOpenEstimate = tick() + MYSTERY_SHOP_INTERVAL
+    local lastKnownEventId = nil
+
+    local traderGetStock = safeFindPath(ReplicatedStorage, "Remotes", "Trader", "GetStock")
+    local traderBuy      = safeFindPath(ReplicatedStorage, "Remotes", "Trader", "Buy")
+
+    -- Helper: Check if Trader shop is currently active via GetStock
+    local function getTraderStock()
+        if not traderGetStock then return nil end
+        if not traderGetStock:IsA("RemoteFunction") then return nil end
+        local ok, result = pcall(function()
+            return traderGetStock:InvokeServer()
+        end)
+        if ok and type(result) == "table" then
+            return result
+        end
+        return nil
+    end
+
+    local function isTraderShopOpen(stockData)
+        if not stockData then return false end
+        -- EventEndsAt == 0 means no active event / shop closed
+        if (stockData.EventEndsAt or 0) == 0 then return false end
+        -- Check items exist and have stock
+        if type(stockData.Items) == "table" and #stockData.Items > 0 then
+            for _, item in ipairs(stockData.Items) do
+                if (item.Stock or 0) > 0 then return true end
+            end
+        end
+        return false
+    end
+
+    -- Helper: Execute buy from Trader shop
+    local function buyTraderItems(stockData)
+        if not traderBuy then return 0 end
+        if not stockData or type(stockData.Items) ~= "table" then return 0 end
+
+        local bought = 0
+        local maxSpend = (Options.MysteryShopMaxSpend and tonumber(Options.MysteryShopMaxSpend.Value)) or 0
+        local buyAll = Options.MysteryShopBuyAll == nil or Options.MysteryShopBuyAll.Value
+        local filterRarities = (Options.MysteryShopBuyRarities and Options.MysteryShopBuyRarities.Value) or {}
+
+        local totalSpent = 0
+
+        for _, item in ipairs(stockData.Items) do
+            local itemName = item.Name or item.DisplayName or ""
+            local itemPrice = tonumber(item.Price) or 0
+            local itemRarity = tostring(item.Rarity or "")
+            local itemStock = tonumber(item.Stock) or 0
+
+            if itemStock <= 0 or itemName == "" then continue end
+
+            -- Rarity filter
+            local shouldBuy = buyAll
+            if not buyAll then
+                local lowerR = itemRarity:lower()
+                for k, v in pairs(filterRarities) do
+                    if (type(k) == "string" and k:lower() == lowerR and v == true) then
+                        shouldBuy = true; break
+                    end
+                end
+            end
+
+            if not shouldBuy then continue end
+
+            -- Max spend check
+            if maxSpend > 0 and (totalSpent + itemPrice) > maxSpend then
+                continue
+            end
+
+            -- Buy all available stock (up to MaxStock)
+            local stockToBuy = itemStock
+            for i = 1, stockToBuy do
+                if maxSpend > 0 and (totalSpent + itemPrice) > maxSpend then break end
+                pcall(function()
+                    traderBuy:FireServer(itemName)
+                end)
+                totalSpent = totalSpent + itemPrice
+                bought = bought + 1
+                task.wait(0.2) -- Small delay between buys
+            end
+        end
+
+        return bought, totalSpent
+    end
+
+    while task.wait(5.0) do
+        local now = tick()
+        local doShop = Options.AutoBuyMysteryShop and Options.AutoBuyMysteryShop.Value
+
+        -- Refresh remotes if needed
+        if not traderGetStock then
+            traderGetStock = safeFindPath(ReplicatedStorage, "Remotes", "Trader", "GetStock")
+        end
+        if not traderBuy then
+            traderBuy = safeFindPath(ReplicatedStorage, "Remotes", "Trader", "Buy")
+        end
+
+        -- Check stock every 15s to detect shop open/close
+        local stockData = nil
+        if now - lastStockCheck > 15 then
+            lastStockCheck = now
+            stockData = getTraderStock()
+        end
+
+        -- Update timer display every 30s
+        if now - lastShopCheckTime > 30 then
+            lastShopCheckTime = now
+            pcall(function()
+                local timeLeft = math.max(0, math.floor(nextShopOpenEstimate - now))
+                local mins = math.floor(timeLeft / 60)
+                local secs = timeLeft % 60
+                if mysteryShopTimerLabel then
+                    local statusText = doShop and "🟢 เปิดใช้งาน" or "🔴 ปิดใช้งาน"
+                    local shopStatus = (stockData and isTraderShopOpen(stockData)) and " | 🏪 ร้านเปิดอยู่!" or ""
+                    Fluent:Notify and pcall(function()
+                        -- silently update; label update only if we have a handle
+                    end)
+                end
+            end)
+        end
+
+        if not isUiInitialized or not stockData then continue end
+
+        local isOpen = isTraderShopOpen(stockData)
+        local currentEventId = stockData.EventId
+
+        -- Detect NEW shop opening (new EventId or was closed before)
+        local isNewShop = (currentEventId ~= nil and currentEventId ~= lastKnownEventId and isOpen)
+
+        if isOpen and (not shopWasOpen or isNewShop) then
+            shopWasOpen = true
+            lastKnownEventId = currentEventId
+            nextShopOpenEstimate = now + MYSTERY_SHOP_INTERVAL
+
+            -- Build item list for notification
+            local itemList = {}
+            if type(stockData.Items) == "table" then
+                for _, item in ipairs(stockData.Items) do
+                    if (item.Stock or 0) > 0 then
+                        table.insert(itemList, (item.DisplayName or item.Name) .. " [" .. (item.Rarity or "?") .. "] $" .. tostring(item.Price))
+                    end
+                end
+            end
+
+            Fluent:Notify({
+                Title = "🏪 Mystery Shop เปิดแล้ว!",
+                Content = "มีสินค้า " .. #itemList .. " ชนิด" .. (doShop and " - กำลังซื้ออัตโนมัติ..." or " (Auto Buy ปิดอยู่)"),
+                Duration = 7
+            })
+
+            -- Auto buy
+            if doShop and (now - lastShopBuyTime > 30) then
+                task.wait(0.5)
+                local count, spent = buyTraderItems(stockData)
+                lastShopBuyTime = now
+
+                if count > 0 then
+                    Fluent:Notify({
+                        Title = "Mystery Shop ✅",
+                        Content = "ซื้อสำเร็จ " .. tostring(count) .. " ชิ้น ใช้เงิน $" .. tostring(spent),
+                        Duration = 6
+                    })
+                    sendDiscordWebhook("🏪 Mystery Shop ซื้อสำเร็จ!", "Trader Shop ซื้อของเรียบร้อย!", 16766720, {
+                        { name = "👤 ผู้เล่น",  value = player.Name,    inline = true },
+                        { name = "🛒 ชิ้น",     value = tostring(count), inline = true },
+                        { name = "💰 ใช้เงิน",  value = "$"..tostring(spent), inline = true },
+                        { name = "🆔 EventId",  value = tostring(currentEventId), inline = true },
+                    })
+                end
+            end
+
+        elseif not isOpen and shopWasOpen then
+            shopWasOpen = false
+            nextShopOpenEstimate = now + MYSTERY_SHOP_INTERVAL
+            Fluent:Notify({
+                Title = "Mystery Shop 🔒",
+                Content = "ร้านค้าลึกลับปิดแล้ว รอบถัดไป ~20 นาที",
+                Duration = 4
+            })
+        end
+
+        -- Retry if shop still open and haven't bought recently
+        if isOpen and doShop and (now - lastShopBuyTime > 120) then
+            local count, spent = buyTraderItems(stockData)
+            if count > 0 then lastShopBuyTime = now end
+        end
+    end
+end)
+task.spawn(function()
+    task.wait(3.0)
+
+    -- Mystery Shop spawns every 20 minutes = 1200 seconds
+    local MYSTERY_SHOP_INTERVAL = 1200 -- 20 minutes in seconds
+    local lastShopBuyTime = 0
+    local lastShopCheckTime = 0
+    local shopWasOpen = false
+    local nextShopOpenEstimate = tick() + MYSTERY_SHOP_INTERVAL
+
+    -- Helper: Try to find the mystery shop frame in PlayerGui
+    local function findMysteryShopFrame()
+        return safeFindPath(playerGui, "MainUI", "Frames", "MysteryShop")
+            or safeFindPath(playerGui, "MainUI", "Frames", "Mystery")
+            or safeFindPath(playerGui, "MainUI", "MysteryShop")
+            or playerGui:FindFirstChild("MysteryShop", true)
+    end
+
+    -- Helper: Detect if mystery shop is currently visible/open
+    local function isMysteryShopOpen()
+        -- 1. Check known frames
+        local shopFrame = findMysteryShopFrame()
+        if shopFrame and shopFrame:IsA("GuiObject") and shopFrame.Visible then
+            return true, shopFrame
+        end
+
+        -- 2. Check workspace for shop model/NPC
+        local shopModel = workspace:FindFirstChild("MysteryShop", true)
+                       or workspace:FindFirstChild("Mystery", true)
+                       or workspace:FindFirstChild("SecretShop", true)
+        if shopModel then
+            local visible = shopModel:GetAttribute("IsOpen") or shopModel:GetAttribute("Open") or shopModel:GetAttribute("Visible")
+            if visible == true then return true, nil end
+
+            -- Check if shop has a buy prompt (means it's open)
+            local prompt = shopModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt and prompt.Enabled then return true, nil end
+        end
+
+        -- 3. Check DataService for mystery shop state
+        pcall(function()
+            local dsModule = safeFindPath(ReplicatedStorage, "Data", "DataService")
+            local ds = dsModule and require(dsModule)
+            if ds and ds.client then
+                local shopData = ds.client:get("MysteryShop") or ds.client:get("Shop") or ds.client:get("Mystery")
+                if type(shopData) == "table" then
+                    if shopData.IsOpen == true or shopData.Open == true or shopData.Active == true then
+                        return true, nil
+                    end
+                end
+            end
+        end)
+
+        return false, nil
+    end
+
+    -- Helper: Execute buy all items in mystery shop
+    local function buyMysteryShopItems(shopFrame)
+        local bought = 0
+        local maxSpend = (Options.MysteryShopMaxSpend and tonumber(Options.MysteryShopMaxSpend.Value)) or 0
+        local buyAll = (Options.MysteryShopBuyAll == nil) or Options.MysteryShopBuyAll.Value
+        local filterRarities = (Options.MysteryShopBuyRarities and Options.MysteryShopBuyRarities.Value) or {}
+
+        -- 1. Try Remote-based buy
+        local shopRemote = safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Buy")
+                        or safeFindPath(ReplicatedStorage, "Remotes", "Shop", "Buy")
+                        or safeFindPath(ReplicatedStorage, "Remotes", "Mystery", "Buy")
+                        or safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Purchase")
+                        or safeFindPath(ReplicatedStorage, "Remotes", "Shop", "Purchase")
+                        or safeFindPath(ReplicatedStorage, "Remotes", "MysteryShop", "Request")
+
+        if shopRemote then
+            if buyAll then
+                safeFireRemote(shopRemote, "BuyAll")
+                safeFireRemote(shopRemote, "All")
+                bought = bought + 1
+            else
+                -- Fire per-slot buy with rarity filtering
+                safeFireRemote(shopRemote, "BuyFiltered", filterRarities)
+                bought = bought + 1
+            end
+        end
+
+        -- 2. Try GUI-based buy (Click buy buttons in frame)
+        if shopFrame then
+            for _, desc in ipairs(shopFrame:GetDescendants()) do
+                if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+                    local n = desc.Name:lower()
+                    if n:find("buy") or n:find("purchase") or n:find("get") then
+                        -- Rarity filter check (if buy all is off)
+                        local shouldBuy = buyAll
+                        if not buyAll then
+                            -- Check parent frame for rarity attribute
+                            local parentFrame = desc.Parent
+                            local itemRarity = parentFrame and (parentFrame:GetAttribute("Rarity") or parentFrame:GetAttribute("ItemRarity"))
+                            if itemRarity then
+                                local lowerR = tostring(itemRarity):lower()
+                                shouldBuy = filterRarities[itemRarity] == true or filterRarities[lowerR] == true
+                            else
+                                shouldBuy = true -- Buy if can't detect rarity
+                            end
+                        end
+
+                        if shouldBuy then
+                            -- Check max spend limit
+                            if maxSpend > 0 then
+                                local priceLabel = desc.Parent and desc.Parent:FindFirstChild("Price", true)
+                                local priceText = priceLabel and priceLabel:IsA("TextLabel") and priceLabel.Text
+                                if priceText then
+                                    local price = 0
+                                    pcall(function()
+                                        local num = priceText:gsub(",", ""):match("([%d]+)")
+                                        price = tonumber(num) or 0
+                                    end)
+                                    if price > maxSpend then
+                                        shouldBuy = false
+                                    end
+                                end
+                            end
+
+                            if shouldBuy then
+                                if firesignal then
+                                    pcall(function() firesignal(desc.MouseButton1Click) end)
+                                elseif firebutton then
+                                    pcall(function() firebutton(desc) end)
+                                end
+                                task.wait(0.15)
+                                bought = bought + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 3. Try ProximityPrompt in workspace
+        pcall(function()
+            local shopModel = workspace:FindFirstChild("MysteryShop", true)
+                           or workspace:FindFirstChild("Mystery", true)
+                           or workspace:FindFirstChild("SecretShop", true)
+            if shopModel then
+                local prompt = shopModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then
+                    pcall(function()
+                        prompt.HoldDuration = 0
+                        prompt.RequiresLineOfSight = false
+                        prompt.MaxActivationDistance = 999999
+                        if fireproximityprompt then
+                            fireproximityprompt(prompt, 0)
+                            fireproximityprompt(prompt, 1)
+                            fireproximityprompt(prompt)
+                        end
+                    end)
+                    bought = bought + 1
+                end
+            end
+        end)
+
+        return bought
+    end
+
+    while task.wait(3.0) do
+        local now = tick()
+        local doShop = Options.AutoBuyMysteryShop and Options.AutoBuyMysteryShop.Value
+
+        -- Update timer display every 30 seconds
+        if now - lastShopCheckTime > 30 then
+            lastShopCheckTime = now
+            pcall(function()
+                local timeLeft = math.max(0, math.floor(nextShopOpenEstimate - now))
+                local mins = math.floor(timeLeft / 60)
+                local secs = timeLeft % 60
+                if mysteryShopTimerLabel and mysteryShopTimerLabel:IsA("TextLabel") then
+                    mysteryShopTimerLabel.Text = string.format("⏱️ คาดว่าร้านจะเปิดใน: %02d:%02d  •  สถานะ: %s",
+                        mins, secs,
+                        doShop and "🟢 เปิดใช้งาน" or "🔴 ปิดใช้งาน"
+                    )
+                end
+            end)
+        end
+
+        if not isUiInitialized then continue end
+
+        -- Detect mystery shop state
+        local isOpen, shopFrame = isMysteryShopOpen()
+
+        -- Shop just opened!
+        if isOpen and not shopWasOpen then
+            shopWasOpen = true
+            nextShopOpenEstimate = now + MYSTERY_SHOP_INTERVAL
+
+            Fluent:Notify({
+                Title = "🏪 Mystery Shop เปิดแล้ว!",
+                Content = "ร้านค้าลึกลับเปิดแล้ว" .. (doShop and " กำลังซื้ออัตโนมัติ..." or " (Auto Buy ปิดอยู่)"),
+                Duration = 6
+            })
+
+            -- Auto buy if enabled and not bought recently
+            if doShop and (now - lastShopBuyTime > 60) then
+                task.wait(0.5) -- Small delay to let shop fully load
+                local count = buyMysteryShopItems(shopFrame)
+                lastShopBuyTime = now
+
+                if count > 0 then
+                    Fluent:Notify({
+                        Title = "Mystery Shop ✅",
+                        Content = "ซื้อไอเทมร้านค้าลึกลับสำเร็จ! ส่ง " .. tostring(count) .. " คำสั่งซื้อ",
+                        Duration = 5
+                    })
+                    sendDiscordWebhook("🏪 Mystery Shop ซื้อสำเร็จ!", "ระบบออโต้ซื้อร้านค้าลึกลับสำเร็จแล้ว!", 16766720, {
+                        { name = "👤 ผู้เล่น", value = player.Name, inline = true },
+                        { name = "🛒 คำสั่งที่ส่ง", value = tostring(count), inline = true },
+                        { name = "⏰ เวลา", value = os.date("%H:%M:%S"), inline = true },
+                    })
+                end
+            end
+
+        elseif not isOpen and shopWasOpen then
+            -- Shop closed
+            shopWasOpen = false
+            nextShopOpenEstimate = now + MYSTERY_SHOP_INTERVAL
+            Fluent:Notify({
+                Title = "Mystery Shop 🔒",
+                Content = "ร้านค้าลึกลับปิดแล้ว รอบถัดไป 20 นาที",
+                Duration = 4
+            })
+        end
+
+        -- Periodic re-attempt if shop is still open but we haven't bought recently
+        if isOpen and doShop and (now - lastShopBuyTime > 60) then
+            local count = buyMysteryShopItems(shopFrame)
+            if count > 0 then
+                lastShopBuyTime = now
+            end
         end
     end
 end)
