@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- PayomboyZ Hub - Stage 4: Modern Waiting & Game Selection Hub (Waiting.txt)
--- Raw URL: https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey
+-- Raw URL: https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey
 -- Engine Architecture: Obsidian Glassmorphic 2 UI Engine + Logout System
 -- ==============================================================================
 
@@ -15,8 +15,8 @@ local LuarmorConfig = {
     DiscordURL = "https://discord.gg/GBKDAe23C",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start",
-    WaitKeyURL = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/WaitKey",
+    StartURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start",
+    WaitKeyURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey",
 }
 
 local Players = game:GetService("Players")
@@ -272,7 +272,7 @@ local function GetDynamicGameDatabase()
     -- 1. ดึงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (บังคับสดใหม่ทุกครั้งด้วย ?t=tick())
     local loaderCode = ""
     pcall(function()
-        loaderCode = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
+        loaderCode = game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
     end)
 
     if loaderCode == "" and isfile and readfile then
