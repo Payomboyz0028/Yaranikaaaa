@@ -131,6 +131,7 @@ local State = {
     PatrolTimer = 0,          -- timer ระหว่าง patrol
     PortalStuckTimer = 0,     -- นับเวลาที่ติดอยู่หน้าวาป
     LastPortalPos = nil,      -- ตำแหน่งวาปล่าสุด
+    SettlementNotified = false, -- แจ้งเตือนเมื่อชนะแล้ว
 
     StageBusy = false,
     StageCooldown = false,
@@ -395,8 +396,17 @@ local function handleAfterRun()
     end
 end
 
--- Settlement detector: ตรวจสอบหน้าต่างจบเกม (VICTORY / DEFEAT / ScreenSettlement)
+-- Settlement detector: ตรวจสอบหน้าต่างจบเกม (VICTORY / DEFEAT / GameOver)
 local function isSettlementScreenVisible()
+    -- สัญญาณที่ 0 (Server State โดยตรง): GameRoundCfg GameOver
+    local ok, isOver = pcall(function()
+        local grc = game.ReplicatedStorage:FindFirstChild("GameRoundCfg")
+        return grc and grc:GetAttribute("GameOver") == true
+    end)
+    if ok and isOver then
+        return true
+    end
+
     local pgui = playerGui or game.Players.LocalPlayer:FindFirstChild("PlayerGui")
     if not pgui then return false end
 
@@ -1544,6 +1554,10 @@ local function findBestSpawnTrigger()
 end
 
 local function moveToNextStage()
+    if isSettlementScreenVisible() then
+        return
+    end
+
     if not Config.AutoProgressStage
         or State.StageBusy
         or State.StageCooldown
@@ -4320,18 +4334,32 @@ connect(RunService.Heartbeat, function(dt)
     end
 
     if isSettlementScreenVisible() then
+        if not State.SettlementNotified then
+            State.SettlementNotified = true
+            pcall(function()
+                ObsidianGlassEngine:Notify({
+                    Title = "🏆 จบดันเจี้ยน (VICTORY)!",
+                    Content = (Config.AfterRunMode == "Again")
+                        and "ตรวจพบหน้าต่างจบเกม! กำลังกด Play Again (เล่นอีกรอบ) อัตโนมัติ..."
+                        or "ตรวจพบหน้าต่างจบเกม! กำลังกด Return to Lobby (กลับล็อบบี้) อัตโนมัติ...",
+                    Duration = 5
+                })
+            end)
+        end
+
+        State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
+        _G.IronSoul_Phase = "Settlement"
+
         local now = tick()
-        if now - lastReturnLobbyTime >= 2.0 then
+        if now - lastReturnLobbyTime >= 1.0 then
             lastReturnLobbyTime = now
-            State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
-            -- export phase ให้ src_irs.txt รู้
-            _G.IronSoul_Phase = "Settlement"
             if Config.AutoReturnToLobby then
                 task.spawn(handleAfterRun)
             end
         end
         return
     else
+        State.SettlementNotified = false
         -- clear settlement phase
         if _G.IronSoul_Phase == "Settlement" then
             _G.IronSoul_Phase = "LOBBY"
