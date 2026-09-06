@@ -115,7 +115,7 @@ local isDownloadingAvatar = false
 
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
     local fileName = "payomboyz_avatar.jpg"
     
     pcall(function()
@@ -700,7 +700,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
         performLogoutKeyClear()
         if gui then pcall(function() gui:Destroy() end) end
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/Start"))()
         end)
     end)
 
@@ -1789,6 +1789,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             fCorner.Parent = frame
 
             local pTitle = Instance.new("TextLabel")
+            pTitle.Name = "ParagraphTitle"
             pTitle.Size = UDim2.new(1, -20, 0, 22)
             pTitle.Position = UDim2.new(0, 10, 0, 6)
             pTitle.BackgroundTransparency = 1
@@ -1800,6 +1801,7 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             pTitle.Parent = frame
 
             local pDesc = Instance.new("TextLabel")
+            pDesc.Name = "ParagraphDesc"
             pDesc.Size = UDim2.new(1, -20, 0, 24)
             pDesc.Position = UDim2.new(0, 10, 0, 26)
             pDesc.BackgroundTransparency = 1
@@ -1810,7 +1812,21 @@ function ObsidianGlassEngine:CreateWindow(cfg)
             pDesc.TextWrapped = true
             pDesc.TextXAlignment = Enum.TextXAlignment.Left
             pDesc.Parent = frame
-            return frame
+
+            local paraObj = setmetatable({
+                Instance = frame,
+                SetTitle = function(self, newTitle)
+                    pTitle.Text = tostring(newTitle or "")
+                end,
+                SetDesc = function(self, newDesc)
+                    pDesc.Text = tostring(newDesc or "")
+                end
+            }, {
+                __index = frame,
+                __newindex = frame
+            })
+
+            return paraObj
         end
 
         table.insert(WindowObj.Tabs, TabObj)
@@ -5604,9 +5620,12 @@ task.spawn(function()
                 if mysteryShopTimerLabel then
                     local statusText = doShop and "🟢 เปิดใช้งาน" or "🔴 ปิดใช้งาน"
                     local shopStatus = (stockData and isTraderShopOpen(stockData)) and " | 🏪 ร้านเปิดอยู่!" or ""
-                    Fluent:Notify and pcall(function()
-                        -- silently update; label update only if we have a handle
-                    end)
+                    local descText = string.format("เปิดรอบถัดไปประมาณ: %02d:%02d (%s)%s", mins, secs, statusText, shopStatus)
+                    if type(mysteryShopTimerLabel.SetDesc) == "function" then
+                        mysteryShopTimerLabel:SetDesc(descText)
+                    elseif mysteryShopTimerLabel:FindFirstChild("ParagraphDesc") then
+                        mysteryShopTimerLabel.ParagraphDesc.Text = descText
+                    end
                 end
             end)
         end
