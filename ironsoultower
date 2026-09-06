@@ -22,7 +22,7 @@ if not player then
     end
 end
 
-local playerGui = player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui")
+local playerGui = player and (player:WaitForChild("PlayerGui", 15) or player:FindFirstChildOfClass("PlayerGui"))
 
 local Config = {
     AutoFarm = true,
@@ -130,6 +130,7 @@ local State = {
     UndergroundPhysics = false,
     LastPortalScan = 0,
     RoomClearTimer = 0,
+    SettlementNotified = false,
     DoorBusy = false,
     DoorCooldown = false,
     StageBusyTimer = 0,
@@ -260,80 +261,157 @@ local function returnToLobby()
     end)
 end
 
--- คลิก button จริงๆใน Settlement GUI (cross-server: remote ยิงไม่ได้)
 local function clickSettlementButton(mode)
-    -- รอให้ GUI โหลดสักพักก่อนสแกน
-    task.wait(1.0)
-    local keywords = mode == "Again"
-        and {"again", "replay", "restart", "playagain", "อีกครั้ง"}
-        or  {"lobby", "return", "exit", "ล็อบบี้", "กลับ"}
-    for _, child in ipairs(playerGui:GetDescendants()) do
-        if child:IsA("TextButton") or child:IsA("ImageButton") then
-            if child.Visible and child.Active then
-                local combined = string.lower(
-                    child.Name ..
-                    (child:IsA("TextButton") and child.Text or "")
-                )
+    local pgui = playerGui or game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+    local success = false
+
+    -- 1) ยิงผ่าน RemoteEvent ของเกมโดยตรง (วิธีที่แม่นยำและเร็วที่สุด)
+    if mode == "Again" then
+        pcall(function()
+            local re = game.ReplicatedStorage:FindFirstChild("Remotes")
+                and game.ReplicatedStorage.Remotes:FindFirstChild("GameRoundRE")
+            if re then
+                re:FireServer("VotePlayAgain")
+                success = true
+            end
+        end)
+    else
+        pcall(function()
+            local fw = require(game.ReplicatedStorage:WaitForChild("Framework"))
+            if fw and fw.Modules and fw.Modules.WorldUtil and fw.Modules.WorldUtil.RemoteEvent then
+                fw.Modules.WorldUtil.RemoteEvent:FireServer("BackLobby")
+                success = true
+            end
+        end)
+    end
+
+    -- 2) หาปุ่มโดยตรงจาก ResultGui.ScreenSettlement.BtnGroup
+    local rg = pgui and pgui:FindFirstChild("ResultGui")
+    local ss = rg and rg:FindFirstChild("ScreenSettlement")
+    local bg = ss and ss:FindFirstChild("BtnGroup")
+
+    local function triggerBtn(btn)
+        if not btn then return end
+        pcall(function() btn:Activate() end)
+        if type(firesignal) == "function" then
+            pcall(function() firesignal(btn.MouseButton1Down) end)
+            pcall(function() firesignal(btn.MouseButton1Click) end)
+            pcall(function() firesignal(btn.Activated) end)
+        end
+        pcall(function()
+            local vim = game:GetService("VirtualInputManager")
+            local abs = btn.AbsolutePosition + btn.AbsoluteSize / 2
+            vim:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+            task.wait(0.04)
+            vim:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+        end)
+        success = true
+    end
+
+    if bg then
+        if mode == "Again" then
+            local btn = bg:FindFirstChild("PlayAgainBtn") or bg:FindFirstChild("PlayAgainAloneBtn")
+            if btn and btn.Visible then
+                triggerBtn(btn)
+            end
+        else
+            local btn = bg:FindFirstChild("ReturnToLobbyBtn")
+            if btn and btn.Visible then
+                triggerBtn(btn)
+            end
+        end
+    end
+
+    -- 3) Fallback: สแกนหาปุ่มทั่ว PlayerGui
+    local againKw = {"again", "replay", "restart", "playagain", "อีกครั้ง", "playagainalonebtn", "playagainbtn", "play again"}
+    local lobbyKw = {"return to lobby", "returntolobby", "lobby", "return", "exit", "ล็อบบี้", "กลับ", "returntolobbybtn"}
+    local keywords = (mode == "Again") and againKw or lobbyKw
+
+    if pgui then
+        for _, child in ipairs(pgui:GetDescendants()) do
+            if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
+                local combined = string.lower(child.Name .. (child:IsA("TextButton") and child.Text or ""))
                 for _, kw in ipairs(keywords) do
                     if combined:find(kw, 1, true) then
-                        pcall(function() child:Activate() end)
-                        task.wait(0.1)
-                        -- fire mouse click เป็น fallback
-                        pcall(function()
-                            local uis = game:GetService("UserInputService")
-                            local vum = game:GetService("VirtualInputManager")
-                            local abs = child.AbsolutePosition + child.AbsoluteSize / 2
-                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
-                            task.wait(0.05)
-                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
-                        end)
-                        return true
+                        triggerBtn(child)
+                        break
                     end
                 end
             end
         end
     end
-    return false
+
+    return success
 end
 
 local function handleAfterRun()
-    if _G.IronSoul_AfterRunMode then Config.AfterRunMode = _G.IronSoul_AfterRunMode end
-    local clicked = clickSettlementButton(Config.AfterRunMode)
-    if not clicked then
-        -- fallback: ยิง remote ExitSettlement
+    if _G.IronSoul_AfterRunMode then
+        Config.AfterRunMode = _G.IronSoul_AfterRunMode
+    end
+
+    for attempt = 1, 4 do
+        clickSettlementButton(Config.AfterRunMode)
+        task.wait(0.6)
+    end
+
+    -- Fallback สำหรับ Return to Lobby
+    if Config.AfterRunMode ~= "Again" then
         returnToLobby()
     end
 end
 
--- Multi-signal settlement detector
+-- Settlement detector: ตรวจสอบหน้าต่างจบเกม (VICTORY / DEFEAT / GameOver)
 local function isSettlementScreenVisible()
-    local signals = 0
-    local sGui = playerGui:FindFirstChild("ScreenSettlement")
-        or playerGui:FindFirstChild("Settlement")
-        or playerGui:FindFirstChild("SettlementGUI")
+    -- สัญญาณที่ 0 (Server State โดยตรง): GameRoundCfg GameOver
+    local ok, isOver = pcall(function()
+        local grc = game.ReplicatedStorage:FindFirstChild("GameRoundCfg")
+        return grc and grc:GetAttribute("GameOver") == true
+    end)
+    if ok and isOver then
+        return true
+    end
+
+    local pgui = playerGui or game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+    if not pgui then return false end
+
+    -- สัญญาณที่ 1 (หลัก): ResultGui.ScreenSettlement เปิดอยู่จริงในเกมนี้
+    local rg = pgui:FindFirstChild("ResultGui")
+    if rg and rg:IsA("ScreenGui") and rg.Enabled then
+        local ss = rg:FindFirstChild("ScreenSettlement")
+        if ss and ss.Visible then
+            return true
+        end
+    end
+
+    -- สัญญาณที่ 2: ScreenSettlement ที่เป็น ScreenGui ตรงๆ
+    local sGui = pgui:FindFirstChild("ScreenSettlement")
+        or pgui:FindFirstChild("Settlement")
+        or pgui:FindFirstChild("SettlementGUI")
     if sGui then
         if sGui:IsA("ScreenGui") and sGui.Enabled then
-            for _, c in ipairs(sGui:GetChildren()) do
-                if c:IsA("GuiObject") and c.Visible then signals += 1; break end
-            end
+            return true
         elseif sGui:IsA("GuiObject") and sGui.Visible then
-            signals += 1
+            return true
         end
     end
-    for _, child in ipairs(playerGui:GetDescendants()) do
-        if child.Name ~= "ObsidianGlass2_UI" and child.Name ~= "ObsidianGlass_NotifHolder" then
-            if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
-                local n = string.lower(child.Name)
-                local t = child:IsA("TextButton") and string.lower(child.Text) or ""
-                if n:find("lobby") or n:find("again") or n:find("return")
-                    or t:find("lobby") or t:find("again") or t:find("return") then
-                    signals += 1; break
-                end
-            end
+
+    -- สัญญาณที่ 3: มีปุ่ม Play Again หรือ Return to Lobby ที่มองเห็นได้
+    local ss2 = rg and rg:FindFirstChild("ScreenSettlement")
+    local bg = ss2 and ss2:FindFirstChild("BtnGroup")
+    if bg then
+        local pa = bg:FindFirstChild("PlayAgainBtn") or bg:FindFirstChild("PlayAgainAloneBtn")
+        local rl = bg:FindFirstChild("ReturnToLobbyBtn")
+        if (pa and pa.Visible) or (rl and rl.Visible) then
+            return true
         end
     end
-    if _G.IronSoul_Phase == "Settlement" then signals += 1 end
-    return signals >= 2
+
+    -- สัญญาณที่ 4: Game phase = Settlement via _G
+    if _G.IronSoul_Phase == "Settlement" or _G.IronSoul_Phase == "SETTLEMENT" then
+        return true
+    end
+
+    return false
 end
 
 
@@ -872,6 +950,17 @@ local function getExitType(part)
         return nil
     end
 
+    -- กรองตัวละครผู้เล่น หรือโมเดลที่มี Humanoid ออกเด็ดขาด (ป้องกันการมองแขน/ขา/ตัว เป็นวาป)
+    if State.Character and part:IsDescendantOf(State.Character) then
+        return nil
+    end
+    local charModel = part:FindFirstAncestorOfClass("Model")
+    if charModel then
+        if charModel:FindFirstChildOfClass("Humanoid") or game.Players:GetPlayerFromCharacter(charModel) then
+            return nil
+        end
+    end
+
     local names = {
         string.lower(part.Name),
     }
@@ -899,6 +988,7 @@ local function getExitType(part)
             or name:find("stage", 1, true)
             or name:find("pass", 1, true)
             or name:find("nextstage", 1, true)
+            or name:find("rounddoor", 1, true)
             or name:find("checkpoint", 1, true) then
             hasPortalName = true
         end
@@ -916,10 +1006,10 @@ local function getExitType(part)
         end
     end
 
-    -- Dynamic fallback: If the part has a TouchTransmitter or ProximityPrompt and is named appropriately or Neon material
+    -- Dynamic fallback: เฉพาะ part ที่มี Neon + TouchTransmitter/ProximityPrompt เท่านั้น
     if not hasPortalName and not hasDoorName then
         if part:FindFirstChildOfClass("TouchTransmitter") or part:FindFirstChildOfClass("ProximityPrompt") then
-            if part.Material == Enum.Material.Neon or part.Transparency < 1 then
+            if part.Material == Enum.Material.Neon then
                 hasPortalName = true
             end
         end
@@ -1257,7 +1347,63 @@ local function teleportNearPortal()
 end
 
 
+local triggeredSpawns = {}
+
+local function findBestSpawnTrigger()
+    if not State.Root then return nil, false end
+    local origin = State.Root.Position
+
+    local candidates = {}
+    local folders = {
+        workspace:FindFirstChild("WaveSpawnTouch"),
+        workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("WaveSpawnTouch"),
+        workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("RoundWakeTouch"),
+        workspace:FindFirstChild("PlayerRespawn")
+    }
+
+    for _, folder in ipairs(folders) do
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("BasePart") then
+                    local hasTouch = child:FindFirstChildOfClass("TouchTransmitter") ~= nil
+                    local dist = (origin - child.Position).Magnitude
+                    local alreadyTriggered = triggeredSpawns[child] ~= nil
+                    -- มี TouchTransmitter = ต้องไปเหยียบแน่นอน
+                    -- ยังไม่เคยเหยียบ และระยะ < 600 = ลองไปเหยียบเพื่อกระตุ้นให้เวฟเกิด
+                    if hasTouch or (not alreadyTriggered and dist < 600) then
+                        table.insert(candidates, {
+                            part = child,
+                            hasTouch = hasTouch,
+                            dist = dist,
+                            alreadyTriggered = alreadyTriggered
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    if #candidates == 0 then return nil, false end
+
+    -- Priority: มี TouchTransmitter ก่อน, ถ้าไม่มีให้เลือกอันที่ยังไม่เคยเหยียบและใกล้ที่สุด
+    table.sort(candidates, function(a, b)
+        if a.hasTouch ~= b.hasTouch then
+            return a.hasTouch
+        end
+        if a.alreadyTriggered ~= b.alreadyTriggered then
+            return not a.alreadyTriggered
+        end
+        return a.dist < b.dist
+    end)
+
+    return candidates[1].part, candidates[1].hasTouch
+end
+
 local function moveToNextStage()
+    if isSettlementScreenVisible() then
+        return
+    end
+
     if not Config.AutoProgressStage
         or State.StageBusy
         or State.StageCooldown
@@ -1284,6 +1430,40 @@ local function moveToNextStage()
     State.TargetModel = nil
     State.TargetRoot = nil
     State.TargetHumanoid = nil
+
+    -- ตรวจสอบจุดเกิดมอน/เวฟ (WaveSpawnTouch / RoundWakeTouch):
+    -- ถ้ามี trigger ที่รอการเหยียบ ให้วาร์ปไปเหยียบเพื่อปลุกมอนขึ้นมาก่อน
+    local spawnTrigger, hasTouch = findBestSpawnTrigger()
+    if spawnTrigger then
+        State.CurrentAction = "Triggering Spawn"
+        travelToPosition(spawnTrigger.Position)
+
+        if type(firetouchinterest) == "function" and State.Root then
+            pcall(function()
+                firetouchinterest(State.Root, spawnTrigger, 0)
+                task.wait(0.05)
+                firetouchinterest(State.Root, spawnTrigger, 1)
+            end)
+        end
+
+        triggeredSpawns[spawnTrigger] = os.clock()
+
+        -- รอให้ server spawn มอน (0.8 วิ)
+        task.wait(0.8)
+
+        local m, r, h = findNearestTarget()
+        if not m then
+            m, r, h = findNearestTargetFallback()
+        end
+        if m and r and h and h.Health > 0 then
+            State.TargetModel = m
+            State.TargetRoot = r
+            State.TargetHumanoid = h
+            State.RoomClearTimer = 0
+            State.CurrentAction = "Farming"
+            return
+        end
+    end
 
     if State.RoomClearTimer < Config.RoomClearDelay then
         State.CurrentAction = "Clearing"
@@ -1378,19 +1558,40 @@ local function moveToNextStage()
         else
             State.CurrentAction = "Moving To Portal"
 
-            local approach =
-                exitObject.Position
-                - exitObject.CFrame.LookVector * 8
+            local portalPos = exitObject.Position
+            local lookFwd   = exitObject.CFrame.LookVector
 
-            travelToPosition(approach, exitObject.Position)
-            task.wait(0.15)
+            local approach = portalPos - lookFwd * 6
+            travelToPosition(approach, portalPos)
+            task.wait(0.3)
 
             State.CurrentAction = "Entering Portal"
 
-            travelToPosition(
-                exitObject.Position,
-                exitObject.Position + exitObject.CFrame.LookVector
-            )
+            for attempt = 1, 12 do
+                if State.Unloaded then break end
+                if not exitObject.Parent then break end
+
+                pcall(function()
+                    local fwd = lookFwd * (1 + (attempt % 3))
+                    State.Root.CFrame = CFrame.new(portalPos + fwd)
+                    State.Root.AssemblyLinearVelocity = Vector3.zero
+                end)
+
+                if type(firetouchinterest) == "function" and State.Root then
+                    pcall(function()
+                        firetouchinterest(State.Root, exitObject, 0)
+                        task.wait()
+                        firetouchinterest(State.Root, exitObject, 1)
+                    end)
+                end
+
+                task.wait(0.08)
+
+                if attempt % 3 == 0 then
+                    travelToPosition(portalPos, portalPos + lookFwd)
+                    task.wait(0.2)
+                end
+            end
         end
     end)
 
@@ -1405,6 +1606,7 @@ local function moveToNextStage()
     State.StageBusyTimer = 0
     State.StageCooldown = true
     State.RoomClearTimer = 0
+    table.clear(triggeredSpawns)
 
     task.delay(2.0, function()
         if not State.Unloaded then
@@ -1870,7 +2072,7 @@ end
 local customAvatarAsset = nil
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
     local fileName = "payomboyz_avatar.jpg"
     
     pcall(function()
@@ -3800,7 +4002,11 @@ local function updateStatusPanel()
             icon = "🃏"
             actStr = "กำลังเลือกการ์ดโบนัส (Selecting Card)"
             badgeColor = COLORS.cyan
-        elseif actStr == "Portal" then
+        elseif actStr == "Triggering Spawn" then
+            icon = "⚡"
+            actStr = "กระตุ้นจุดเกิดมอน (Triggering Spawn)"
+            badgeColor = COLORS.warning
+        elseif actStr == "Portal" or actStr == "Moving To Portal" or actStr == "Entering Portal" then
             icon = "🌀"
             actStr = "กำลังไปประตูขึ้นชั้นถัดไป (Next Floor Exit)"
             badgeColor = COLORS.cyan
@@ -3858,17 +4064,32 @@ connect(RunService.Heartbeat, function(dt)
     end
 
     if isSettlementScreenVisible() then
+        if not State.SettlementNotified then
+            State.SettlementNotified = true
+            pcall(function()
+                ObsidianGlassEngine:Notify({
+                    Title = "🏆 จบหอคอย (VICTORY)!",
+                    Content = (Config.AfterRunMode == "Again")
+                        and "ตรวจพบหน้าต่างจบเกม! กำลังกด Play Again (เล่นอีกรอบ) อัตโนมัติ..."
+                        or "ตรวจพบหน้าต่างจบเกม! กำลังกด Return to Lobby (กลับล็อบบี้) อัตโนมัติ...",
+                    Duration = 5
+                })
+            end)
+        end
+
+        State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
+        _G.IronSoul_Phase = "Settlement"
+
         local now = tick()
-        if now - lastReturnLobbyTime >= 2.0 then
+        if now - lastReturnLobbyTime >= 1.0 then
             lastReturnLobbyTime = now
-            State.CurrentAction = Config.AfterRunMode == "Again" and "Play Again" or "Return to Lobby"
-            _G.IronSoul_Phase = "Settlement"
             if Config.AutoReturnToLobby then
                 task.spawn(handleAfterRun)
             end
         end
         return
     else
+        State.SettlementNotified = false
         if _G.IronSoul_Phase == "Settlement" then _G.IronSoul_Phase = "LOBBY" end
     end
 
