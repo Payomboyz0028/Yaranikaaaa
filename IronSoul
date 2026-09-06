@@ -19,7 +19,7 @@ if game.PlaceId == IRON_BOSS_MAP_ID or game.GameId == IRON_BOSS_MAP_ID
     print("[PayomboyZ HUB] ตรวจพบแมพดันเจี้ยน/ถ้ำ (" .. tostring(game.PlaceId) .. ") กำลังโหลดระบบดันเจี้ยนแบบ Async...")
     task.spawn(function()
         pcall(function()
-            local code = game:HttpGet("https://raw.githubusercontent.com/aslamdunk7/paypmboygang/refs/heads/main/ironsoulboss")
+            local code = game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/ironsoulboss")
             if code and #code > 0 then
                 loadstring(code)()
             end
