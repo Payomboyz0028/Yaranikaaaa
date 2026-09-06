@@ -61,7 +61,9 @@ local Config = {
     PortalRefresh = 1.00,
     SkillInterval = 2.50,
     RoomClearRadius = 140,
-    RoomClearDelay = 1.25,
+    -- เพิ่มเวลา delay ก่อนเข้าวาป และเพิ่ม confirm scan
+    RoomClearDelay = 3.5,       -- รอ 3.5 วิหลังไม่เจอมอน (เพิ่มจาก 1.25)
+    RoomClearConfirmDelay = 1.5, -- รอ confirm อีก 1.5 วิหลัง spatial scan ก็ไม่เจอ
     TargetSearchRadius = 600,
     DoorInteractDistance = 18,
     DoorOpenWait = 0.90,
@@ -69,6 +71,17 @@ local Config = {
     ExitRetryDelay = 0.75,
     -- Portal stuck detection
     PortalStuckTimeout = 4.0,
+
+    -- ระบบเปิดกล่องอัตโนมัติในดันเจี้ยน
+    AutoOpenChest = true,
+    ChestSearchRadius = 80,      -- รัศมีค้นหากล่อง
+    ChestOpenDelay = 0.5,        -- delay ระหว่างเปิดกล่องแต่ละใบ
+
+    -- Ultimate G
+    AutoUltimate = true,         -- เปิด G ultimate อัตโนมัติ
+    GHpTrigger = 0.60,           -- trigger G เมื่อ HP มอน < 60%
+    GAlwaysInterval = 10.0,      -- ยิง G ทุก N วิแม้ HP ยังสูง
+    GCooldown = 12.0,            -- cooldown G (วิ)
 
     MovementInterval = 1 / 30,
     AttackInterval = 0.10,
@@ -111,7 +124,13 @@ local State = {
         Q = 0,
         E = 0,
         R = 0,
+        G = 0,
     },
+    GUltimateReady = false,   -- G ultimate พร้อมใช้
+    PatrolBusy = false,       -- กำลัง patrol scan อยู่
+    PatrolTimer = 0,          -- timer ระหว่าง patrol
+    PortalStuckTimer = 0,     -- นับเวลาที่ติดอยู่หน้าวาป
+    LastPortalPos = nil,      -- ตำแหน่งวาปล่าสุด
 
     StageBusy = false,
     StageCooldown = false,
@@ -132,11 +151,14 @@ local State = {
     UndergroundPhysics = false,
     LastPortalScan = 0,
     RoomClearTimer = 0,
+    RoomClearConfirmTimer = 0,  -- timer สำหรับ confirm scan ว่ามอนหมดจริง
+    RoomClearConfirmed = false, -- ผ่าน spatial confirm scan แล้ว
     DoorBusy = false,
     DoorCooldown = false,
     StageBusyTimer = 0,
     WatchdogTimer = 0,
     FallbackTargetTimer = 0,
+    ChestBusy = false,          -- กำลังเปิดกล่องอยู่
     Stats = {
         Heartbeats = 0,
         TargetScans = 0,
@@ -197,6 +219,8 @@ local function getSaveData()
         ExitSearchRadius = Config.ExitSearchRadius,
         ExitRetryDelay = Config.ExitRetryDelay,
         Debug = Config.Debug,
+        AutoOpenChest = Config.AutoOpenChest,
+        ChestSearchRadius = Config.ChestSearchRadius,
     }
 end
 
@@ -226,7 +250,7 @@ local function loadSettings()
                 "AutoProgressStage", "AutoReturnToLobby", "AfterRunMode", "OrbitRadius", "OrbitSpeed",
                 "AboveHeight", "UndergroundHeight", "UndergroundMode",
                 "KillAuraRadius", "TargetSearchRadius", "DoorInteractDistance", "DoorOpenWait", "ExitSearchRadius", "ExitRetryDelay", "PerformanceMode", "SafeMode",
-                "EmergencyEscape"
+                "EmergencyEscape", "AutoOpenChest", "ChestSearchRadius"
             }) do
                 if data[key] ~= nil then
                     Config[key] = data[key]
@@ -268,32 +292,59 @@ end
 
 local function clickSettlementButton(mode)
     task.wait(0.5)
-    local keywords = mode == "Again"
-        and {"again", "replay", "restart", "playagain", "อีกครั้ง", "playagainalonebtn", "playagainbtn"}
-        or  {"lobby", "return", "exit", "ล็อบบี้", "กลับ", "returntolobbybtn"}
-    for _, child in ipairs(playerGui:GetDescendants()) do
-        if child:IsA("TextButton") or child:IsA("ImageButton") then
-            if child.Visible then
+
+    local againKw = {"again", "replay", "restart", "playagain", "อีกครั้ง",
+        "playagainalonebtn", "playagainbtn", "play again"}
+    local lobbyKw = {"return to lobby", "returntolobby", "lobby", "return",
+        "exit", "ล็อบบี้", "กลับ", "returntolobbybtn"}
+    local keywords = (mode == "Again") and againKw or lobbyKw
+
+    local function tryClick(child)
+        -- 1) Activate
+        pcall(function() child:Activate() end)
+        task.wait(0.06)
+        -- 2) VirtualInputManager click
+        pcall(function()
+            local vum = game:GetService("VirtualInputManager")
+            local abs = child.AbsolutePosition + child.AbsoluteSize / 2
+            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
+            task.wait(0.04)
+            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
+        end)
+        -- 3) MouseButton1Click fire (FireServer compat)
+        pcall(function()
+            if child:IsA("TextButton") or child:IsA("ImageButton") then
+                child.MouseButton1Click:Fire()
+            end
+        end)
+        -- 4) FireClickDetector fallback
+        pcall(function()
+            local cd = child:FindFirstChildOfClass("ClickDetector")
+                or child.Parent:FindFirstChildOfClass("ClickDetector")
+            if cd and type(fireclickdetector) == "function" then
+                fireclickdetector(cd)
+            end
+        end)
+    end
+
+    -- Scan up to 3 rounds with 0.6s gap (Settlement UI may load slowly)
+    for attempt = 1, 3 do
+        for _, child in ipairs(playerGui:GetDescendants()) do
+            if (child:IsA("TextButton") or child:IsA("ImageButton")) and child.Visible then
                 local combined = string.lower(
                     child.Name ..
                     (child:IsA("TextButton") and child.Text or "")
                 )
                 for _, kw in ipairs(keywords) do
                     if combined:find(kw, 1, true) then
-                        pcall(function() child:Activate() end)
-                        task.wait(0.1)
-                        pcall(function()
-                            local vum = game:GetService("VirtualInputManager")
-                            local abs = child.AbsolutePosition + child.AbsoluteSize / 2
-                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, true, game, 0)
-                            task.wait(0.05)
-                            vum:SendMouseButtonEvent(abs.X, abs.Y, 0, false, game, 0)
-                        end)
+                        tryClick(child)
+                        task.wait(0.25)
                         return true
                     end
                 end
             end
         end
+        task.wait(0.6)
     end
     return false
 end
@@ -302,8 +353,13 @@ local function handleAfterRun()
     if _G.IronSoul_AfterRunMode then
         Config.AfterRunMode = _G.IronSoul_AfterRunMode
     end
-    local clicked = clickSettlementButton(Config.AfterRunMode)
-    if not clicked then
+    -- ลองกดปุ่มก่อน ถ้าไม่ได้ใช้ remote
+    for attempt = 1, 3 do
+        if clickSettlementButton(Config.AfterRunMode) then return end
+        task.wait(0.8)
+    end
+    -- Fallback: ถ้าเป็น Lobby ใช้ remote
+    if Config.AfterRunMode ~= "Again" then
         returnToLobby()
     end
 end
@@ -900,6 +956,17 @@ local function getExitType(part)
         return nil
     end
 
+    -- กรองตัวละครผู้เล่น หรือโมเดลที่มี Humanoid ออกเด็ดขาด (ป้องกันการมองแขน/ขา/ตัว เป็นวาป)
+    if State.Character and part:IsDescendantOf(State.Character) then
+        return nil
+    end
+    local charModel = part:FindFirstAncestorOfClass("Model")
+    if charModel then
+        if charModel:FindFirstChildOfClass("Humanoid") or game.Players:GetPlayerFromCharacter(charModel) then
+            return nil
+        end
+    end
+
     local names = {
         string.lower(part.Name),
     }
@@ -927,6 +994,7 @@ local function getExitType(part)
             or name:find("stage", 1, true)
             or name:find("pass", 1, true)
             or name:find("nextstage", 1, true)
+            or name:find("rounddoor", 1, true)
             or name:find("checkpoint", 1, true) then
             hasPortalName = true
         end
@@ -944,10 +1012,10 @@ local function getExitType(part)
         end
     end
 
-    -- Dynamic fallback: If the part has a TouchTransmitter or ProximityPrompt and is named appropriately or Neon material
+    -- Dynamic fallback: เฉพาะ part ที่มี Neon + TouchTransmitter/ProximityPrompt เท่านั้น
     if not hasPortalName and not hasDoorName then
         if part:FindFirstChildOfClass("TouchTransmitter") or part:FindFirstChildOfClass("ProximityPrompt") then
-            if part.Material == Enum.Material.Neon or part.Transparency < 1 then
+            if part.Material == Enum.Material.Neon then
                 hasPortalName = true
             end
         end
@@ -1292,6 +1360,156 @@ local function teleportNearPortal()
 end
 
 
+-- =====================================================================
+-- ระบบเปิดกล่องอัตโนมัติ (Auto Open Chest)
+-- =====================================================================
+local function looksLikeChest(model)
+    if not model or not model:IsA("Model") then return false end
+    local n = model.Name:lower()
+    return n:find("chest") or n:find("box") or n:find("treasure")
+        or n:find("loot") or n:find("crate") or n:find("reward")
+        or n:find("present") or n:find("gift") or n:find("dungeon")
+        or n:find("drop")
+end
+
+local function findAndOpenChests()
+    if not Config.AutoOpenChest
+        or State.ChestBusy
+        or not State.Root
+        or not State.Humanoid then
+        return
+    end
+
+    local origin = State.Root.Position
+    local radiusSq = Config.ChestSearchRadius * Config.ChestSearchRadius
+
+    local chestsFound = {}
+
+    -- scan workspace descendants สำหรับ ProximityPrompt ที่อยู่ใน chest model
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if model and looksLikeChest(model) then
+                local pp = model.PrimaryPart or model:FindFirstChildOfClass("BasePart")
+                if pp then
+                    local dist = (origin - pp.Position)
+                    if dist:Dot(dist) <= radiusSq then
+                        table.insert(chestsFound, {prompt = obj, model = model, part = pp})
+                    end
+                end
+            end
+        end
+    end
+
+    -- ถ้าไม่เจอผ่าน model name ลองหา ProximityPrompt ทั่วไปที่อาจเป็นกล่อง
+    if #chestsFound == 0 then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") then
+                local part = obj.Parent
+                if part and part:IsA("BasePart") then
+                    -- กรองเฉพาะ prompt ที่ไม่ใช่ประตู/portal
+                    local pn = part.Name:lower()
+                    local mn = part.Parent and part.Parent.Name:lower() or ""
+                    local isPortal = pn:find("portal") or pn:find("warp") or pn:find("door")
+                        or pn:find("gate") or mn:find("portal") or mn:find("warp")
+                        or mn:find("door") or mn:find("gate")
+                    if not isPortal then
+                        local dist = origin - part.Position
+                        if dist:Dot(dist) <= radiusSq then
+                            table.insert(chestsFound, {prompt = obj, model = nil, part = part})
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if #chestsFound == 0 then return end
+
+    State.ChestBusy = true
+    State.CurrentAction = "Opening Chest"
+
+    for _, entry in ipairs(chestsFound) do
+        if State.Unloaded then break end
+
+        local prompt = entry.prompt
+        local part   = entry.part
+
+        if prompt and prompt.Parent and part and part.Parent then
+            -- teleport เข้าหากล่อง
+            pcall(function()
+                State.Root.CFrame = CFrame.new(part.Position + Vector3.new(0, 3, 0))
+                State.Root.AssemblyLinearVelocity = Vector3.zero
+            end)
+            task.wait(0.20)
+
+            -- fire ProximityPrompt
+            if type(fireproximityprompt) == "function" then
+                pcall(function() fireproximityprompt(prompt) end)
+            else
+                pcall(function() prompt.Triggered:Fire() end)
+            end
+
+            task.wait(Config.ChestOpenDelay)
+        end
+    end
+
+    State.ChestBusy = false
+    State.CurrentAction = "Farming"
+end
+
+local triggeredSpawns = {}
+
+local function findBestSpawnTrigger()
+    if not State.Root then return nil, false end
+    local origin = State.Root.Position
+
+    local candidates = {}
+    local folders = {
+        workspace:FindFirstChild("WaveSpawnTouch"),
+        workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("WaveSpawnTouch"),
+        workspace:FindFirstChild("WorldEnemys") and workspace.WorldEnemys:FindFirstChild("RoundWakeTouch"),
+        workspace:FindFirstChild("PlayerRespawn")
+    }
+
+    for _, folder in ipairs(folders) do
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("BasePart") then
+                    local hasTouch = child:FindFirstChildOfClass("TouchTransmitter") ~= nil
+                    local dist = (origin - child.Position).Magnitude
+                    local alreadyTriggered = triggeredSpawns[child] ~= nil
+                    -- มี TouchTransmitter = ต้องไปเหยียบแน่นอน
+                    -- ยังไม่เคยเหยียบ และระยะ < 600 = ลองไปเหยียบเพื่อกระตุ้นให้เวฟเกิด
+                    if hasTouch or (not alreadyTriggered and dist < 600) then
+                        table.insert(candidates, {
+                            part = child,
+                            hasTouch = hasTouch,
+                            dist = dist,
+                            alreadyTriggered = alreadyTriggered
+                        })
+                    end
+                end
+            end
+        end
+    end
+
+    if #candidates == 0 then return nil, false end
+
+    -- Priority: มี TouchTransmitter ก่อน, ถ้าไม่มีให้เลือกอันที่ยังไม่เคยเหยียบและใกล้ที่สุด
+    table.sort(candidates, function(a, b)
+        if a.hasTouch ~= b.hasTouch then
+            return a.hasTouch
+        end
+        if a.alreadyTriggered ~= b.alreadyTriggered then
+            return not a.alreadyTriggered
+        end
+        return a.dist < b.dist
+    end)
+
+    return candidates[1].part, candidates[1].hasTouch
+end
+
 local function moveToNextStage()
     if not Config.AutoProgressStage
         or State.StageBusy
@@ -1312,6 +1530,8 @@ local function moveToNextStage()
         State.TargetRoot = root
         State.TargetHumanoid = humanoid
         State.RoomClearTimer = 0
+        State.RoomClearConfirmTimer = 0
+        State.RoomClearConfirmed = false
         State.CurrentAction = "Farming"
         return
     end
@@ -1320,10 +1540,68 @@ local function moveToNextStage()
     State.TargetRoot = nil
     State.TargetHumanoid = nil
 
-    if State.RoomClearTimer < Config.RoomClearDelay then
+    -- ตรวจสอบจุดเกิดมอน/เวฟ (WaveSpawnTouch / RoundWakeTouch):
+    -- ถ้ามี trigger ที่รอการเหยียบ ให้วาร์ปไปเหยียบเพื่อปลุกมอนขึ้นมาก่อน
+    local spawnTrigger, hasTouch = findBestSpawnTrigger()
+    if spawnTrigger then
+        State.CurrentAction = "Triggering Spawn"
+        travelToPosition(spawnTrigger.Position)
+
+        if type(firetouchinterest) == "function" and State.Root then
+            pcall(function()
+                firetouchinterest(State.Root, spawnTrigger, 0)
+                task.wait(0.05)
+                firetouchinterest(State.Root, spawnTrigger, 1)
+            end)
+        end
+
+        triggeredSpawns[spawnTrigger] = os.clock()
+
+        -- รอให้ server spawn มอน (0.8 วิ)
+        task.wait(0.8)
+
+        local m, r, h = findNearestTarget()
+        if not m then
+            m, r, h = findNearestTargetFallback()
+        end
+        if m and r and h and h.Health > 0 then
+            State.TargetModel = m
+            State.TargetRoot = r
+            State.TargetHumanoid = h
+            State.RoomClearTimer = 0
+            State.RoomClearConfirmTimer = 0
+            State.RoomClearConfirmed = false
+            State.CurrentAction = "Farming"
+            return
+        end
+    end
+
+    -- Phase 1: รอ 1.5 วิหลัง cache miss (ป้องกัน trigger เร็วเกินไป)
+    if State.RoomClearTimer < 1.5 then
         State.CurrentAction = "Clearing"
         return
     end
+
+    -- Phase 2: spatial scan ยืนยัน — ถ้าเจอมอนกลับไปฟาร์ม
+    --          ถ้าไม่เจอ → ไปวาปเลย ไม่รอ phase เพิ่ม
+    if not State.RoomClearConfirmed then
+        local m2, r2, h2 = findNearestTargetFallback()
+        if m2 and r2 and h2 and h2.Health > 0 then
+            State.TargetModel = m2
+            State.TargetRoot = r2
+            State.TargetHumanoid = h2
+            State.RoomClearTimer = 0
+            State.RoomClearConfirmTimer = 0
+            State.RoomClearConfirmed = false
+            State.CurrentAction = "Farming"
+            return
+        end
+        -- spatial scan ไม่เจอ → mark confirmed แล้วตกไปเข้าวาปเลย
+        State.RoomClearConfirmed = true
+    end
+
+    -- ถึงจุดนี้ = หามอนไม่เจอทั้ง cache + spatial scan และเหยียบจุด spawn ครบแล้ว → ไปวาปทันที
+
 
     -- No enemy: immediately refresh the exit list and go to the closest
     -- valid portal/door. This is the old behavior the user wants restored.
@@ -1391,10 +1669,15 @@ local function moveToNextStage()
 
                     travelToPosition(approach, newPortal.Position)
                     task.wait(0.15)
-                    travelToPosition(
-                        newPortal.Position,
-                        newPortal.Position + newPortal.CFrame.LookVector
-                    )
+                    -- nudge เข้า 3 ครั้ง
+                    for _ = 1, 3 do
+                        travelToPosition(
+                            newPortal.Position,
+                            newPortal.Position + newPortal.CFrame.LookVector
+                        )
+                        task.wait(0.4)
+                        if State.Unloaded then break end
+                    end
                 else
                     State.CurrentAction = "Entering Door"
 
@@ -1404,44 +1687,86 @@ local function moveToNextStage()
 
                     travelToPosition(approach, exitObject.Position)
                     task.wait(0.15)
-                    travelToPosition(
-                        exitObject.Position,
-                        exitObject.Position + exitObject.CFrame.LookVector
-                    )
+                    for _ = 1, 3 do
+                        travelToPosition(
+                            exitObject.Position,
+                            exitObject.Position + exitObject.CFrame.LookVector
+                        )
+                        task.wait(0.4)
+                        if State.Unloaded then break end
+                    end
                 end
             end
         else
             State.CurrentAction = "Moving To Portal"
 
-            local approach =
-                exitObject.Position
-                - exitObject.CFrame.LookVector * 8
+            local portalPos  = exitObject.Position
+            local lookFwd    = exitObject.CFrame.LookVector
 
-            travelToPosition(approach, exitObject.Position)
-            task.wait(0.15)
+            -- เดินเข้าหาวาปปกติก่อน
+            local approach = portalPos - lookFwd * 6
+            travelToPosition(approach, portalPos)
+            task.wait(0.3)
 
             State.CurrentAction = "Entering Portal"
 
-            travelToPosition(
-                exitObject.Position,
-                exitObject.Position + exitObject.CFrame.LookVector
-            )
+            -- ลอง nudge เข้าหลายครั้ง — วัด success จาก exitObject ถูก destroy
+            -- (server จะลบวาปออกหรือ unparent เมื่อโหลดแมพใหม่)
+            for attempt = 1, 12 do
+                if State.Unloaded then break end
+
+                -- ถ้า exitObject หายแล้ว = เข้าสำเร็จ
+                if not exitObject.Parent then break end
+
+                -- CFrame เข้าไปในวาป
+                pcall(function()
+                    local fwd = lookFwd * (1 + (attempt % 3))
+                    State.Root.CFrame = CFrame.new(portalPos + fwd)
+                    State.Root.AssemblyLinearVelocity = Vector3.zero
+                end)
+
+                -- trigger Touched event ของ portal โดยตรง
+                if type(firetouchinterest) == "function" and State.Root then
+                    pcall(function()
+                        firetouchinterest(State.Root, exitObject, 0)
+                        task.wait()
+                        firetouchinterest(State.Root, exitObject, 1)
+                    end)
+                end
+
+                task.wait(0.08)
+
+                -- สลับ travelToPosition ทุก 3 attempt
+                if attempt % 3 == 0 then
+                    travelToPosition(portalPos, portalPos + lookFwd)
+                    task.wait(0.2)
+                end
+            end
         end
     end)
+
+
+
 
     if not ok and Config.Debug then
         warn("[IronSoul] exit transition error:", err)
     end
 
-    -- Allow 1.5 - 2 seconds for server to load the next stage and spawn new mobs
-    task.wait(1.5)
+    -- รอ server load stage ใหม่
+    task.wait(2.0)
 
     State.StageBusy = false
     State.StageBusyTimer = 0
     State.StageCooldown = true
     State.RoomClearTimer = 0
+    State.RoomClearConfirmTimer = 0
+    State.RoomClearConfirmed = false
+    State.PatrolBusy = false
+    State.PortalStuckTimer = 0
+    State.LastPortalPos = nil
+    table.clear(triggeredSpawns)
 
-    task.delay(2.0, function()
+    task.delay(2.5, function()
         if not State.Unloaded then
             State.StageCooldown = false
         end
@@ -1451,10 +1776,12 @@ end
 
 rebuildPortalCandidates()
 
+-- Cooldowns จริง (วินาที) — ปรับตามเกม
 local SkillCooldownConfig = {
-    Q = 0.70,
-    E = 0.70,
-    R = 1.50,
+    Q = 0.80,
+    E = 0.80,
+    R = 2.00,
+    G = 12.0,   -- G ultimate cooldown
 }
 
 local function useSkills()
@@ -1466,14 +1793,101 @@ local function useSkills()
     end
 
     local now = os.clock()
+    local hpPct = State.TargetHealthPercent / 100  -- 0-1
 
-    for _, key in ipairs({"E", "Q", "R"}) do
-        if now >= State.SkillCooldowns[key] then
-            pressKey(key)
-            State.SkillCooldowns[key] = now + SkillCooldownConfig[key]
-            task.wait(0.15)
+    -- อ่าน G config จาก Config ถ้ามี
+    local gCooldown   = Config.GCooldown or 12.0
+    local gHpTrigger  = Config.GHpTrigger or 0.60
+    local gAlways     = Config.GAlwaysInterval or 10.0
+    SkillCooldownConfig.G = gCooldown
+
+    -- G (Ultimate)
+    if Config.AutoUltimate then
+        local gLastUsed = State.SkillCooldowns.G - gCooldown
+        local gElapsed  = now - gLastUsed
+        local shouldG = (now >= State.SkillCooldowns.G)
+            and (hpPct < gHpTrigger or gElapsed >= gAlways)
+        if shouldG then
+            pressKey("G")
+            State.SkillCooldowns.G = now + gCooldown
+            State.GUltimateReady = false
+            task.wait(0.12)
         end
     end
+
+    -- R — ทุก cooldown (heavy skill)
+    if now >= State.SkillCooldowns.R then
+        pressKey("R")
+        State.SkillCooldowns.R = now + SkillCooldownConfig.R
+        task.wait(0.12)
+    end
+
+    -- E — ทุก cooldown
+    if now >= State.SkillCooldowns.E then
+        pressKey("E")
+        State.SkillCooldowns.E = now + SkillCooldownConfig.E
+        task.wait(0.10)
+    end
+
+    -- Q — basic skill กดบ่อยสุด
+    if now >= State.SkillCooldowns.Q then
+        pressKey("Q")
+        State.SkillCooldowns.Q = now + SkillCooldownConfig.Q
+        task.wait(0.10)
+    end
+end
+
+-- =====================================================================
+-- Patrol Scan: วนตรวจสอบจุดต่างๆรอบแมพก่อนเข้าวาป
+-- =====================================================================
+local function doPatrolScan()
+    if not State.Root or State.Unloaded then return false end
+
+    -- สร้าง sample points รอบ origin ระยะ 60-120 studs
+    local origin = State.Root.Position
+    local angles = {0, 45, 90, 135, 180, 225, 270, 315}
+    local radii  = {50, 100, 150}
+    local found  = false
+
+    for _, r in ipairs(radii) do
+        for _, deg in ipairs(angles) do
+            if State.Unloaded or found then break end
+            local rad = math.rad(deg)
+            local checkPos = Vector3.new(
+                origin.X + math.cos(rad) * r,
+                origin.Y,
+                origin.Z + math.sin(rad) * r
+            )
+            -- teleport ไปตรวจ
+            pcall(function()
+                State.Root.CFrame = CFrame.new(checkPos)
+                State.Root.AssemblyLinearVelocity = Vector3.zero
+            end)
+            task.wait(0.20)
+            -- spatial scan ณ จุดนั้น
+            local m, r2, h = findNearestTargetFallback()
+            if m and h and h.Health > 0 then
+                State.TargetModel    = m
+                State.TargetRoot     = r2
+                State.TargetHumanoid = h
+                State.RoomClearTimer = 0
+                State.RoomClearConfirmTimer = 0
+                State.RoomClearConfirmed    = false
+                found = true
+            end
+        end
+        if found then break end
+    end
+
+    -- teleport กลับ origin
+    pcall(function()
+        if State.Root then
+            State.Root.CFrame = CFrame.new(origin)
+            State.Root.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+    task.wait(0.20)
+    return found
 end
 
 
@@ -1845,7 +2259,7 @@ end
 local customAvatarAsset = nil
 local function loadCustomAvatarImage()
     if customAvatarAsset then return customAvatarAsset end
-    local avatarUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/main/543199739_2812856088914181_3062917809445648175_n.jpg"
+    local avatarUrl = "https://raw.githubusercontent.com/aslamdunk7/paypmboygang/main/543199739_2812856088914181_3062917809445648175_n.jpg"
     local fileName = "payomboyz_avatar.jpg"
     
     pcall(function()
@@ -3189,6 +3603,32 @@ MainTab:AddButton({
     end
 })
 
+MainTab:AddSection("ระบบเปิดกล่องในดันเจี้ยน")
+
+MainTab:AddToggle("AutoOpenChest", {
+    Title = "Auto Open Chest (เปิดกล่องในดันอัตโนมัติ)",
+    Desc = "เปิดกล่อง/ไอเทมในดันเจี้ยนอัตโนมัติเมื่อห้องเคลียร์แล้ว (ค้นหา ProximityPrompt)",
+    Default = Config.AutoOpenChest,
+    Callback = function(val)
+        Config.AutoOpenChest = val
+        saveSettings()
+    end
+})
+
+MainTab:AddButton({
+    Title = "📦 Open Chests Now (เปิดกล่องทันที)",
+    Callback = function()
+        task.spawn(function()
+            pcall(findAndOpenChests)
+        end)
+        ObsidianGlassEngine:Notify({
+            Title = "เปิดกล่อง",
+            Content = "กำลังค้นหาและเปิดกล่องในรัศมี " .. Config.ChestSearchRadius .. " Studs...",
+            Duration = 3
+        })
+    end
+})
+
 MainTab:AddToggle("UndergroundMode", {
     Title = "Underground Mode (ตำแหน่งใต้ดิน / ลอยบนฟ้า)",
     Desc = "เปิด = โหมดมุดใต้ดิน (Underground) | ปิด = โหมดลอยเหนือหัว (Above)",
@@ -3245,8 +3685,8 @@ CombatTab:AddToggle("AutoAttack", {
 })
 
 CombatTab:AddToggle("AutoSkill", {
-    Title = "Auto Skill (กดใช้สกิล Q / E / R อัตโนมัติ)",
-    Desc = "ปลดปล่อยสกิลต่อสู้ตามจังหวะ คูลดาวน์",
+    Title = "Auto Skill Q/E/R (กดสกิลอัตโนมัติ)",
+    Desc = "กด Q, E, R ตามคูลดาวน์อัตโนมัติขณะต่อสู้",
     Default = Config.AutoSkill,
     Callback = function(val)
         Config.AutoSkill = val
@@ -3255,9 +3695,38 @@ CombatTab:AddToggle("AutoSkill", {
     end
 })
 
+CombatTab:AddToggle("AutoUltimate", {
+    Title = "Auto G Ultimate (ท่าไม้ตาย G อัตโนมัติ)",
+    Desc = "กด G เมื่อ HP มอน < 60% หรือทุก 10 วินาที — เปิดใช้ร่วมกับ Auto Skill",
+    Default = true,
+    Callback = function(val)
+        Config.AutoUltimate = val
+        -- ถ้าปิด G ให้ reset cooldown เพื่อไม่ block
+        if not val then
+            State.SkillCooldowns.G = math.huge
+        else
+            State.SkillCooldowns.G = 0
+        end
+    end
+})
+
+CombatTab:AddButton({
+    Title = "⚡ Use G Ultimate Now (ใช้ท่าไม้ตายทันที)",
+    Callback = function()
+        pressKey("G")
+        State.SkillCooldowns.G = os.clock() + SkillCooldownConfig.G
+        ObsidianGlassEngine:Notify({
+            Title = "G Ultimate",
+            Content = "ใช้ท่าไม้ตาย G แล้ว! Cooldown " .. SkillCooldownConfig.G .. " วินาที",
+            Duration = 3
+        })
+    end
+})
+
 CombatTab:AddToggle("AutoAvoid", {
     Title = "Auto Avoid Attack (หลบการโจมตีพื้นที่สีแดง)",
     Desc = "ตรวจจับการโจมตีสีแดงของ Boss แล้วเดินหลบออกระยะความปลอดภัย",
+
     Default = Config.AutoAvoid,
     Callback = function(val)
         Config.AutoAvoid = val
@@ -3737,9 +4206,29 @@ local function updateStatusPanel()
             icon = "🌾"
             actStr = "กำลังฟาร์มมอนสเตอร์ (Farming)"
             badgeColor = COLORS.success
-        elseif actStr == "Portal" then
+        elseif actStr == "Clearing" then
+            icon = "🔍"
+            actStr = "รอห้องเคลียร์ / ตรวจมอน (Clearing)"
+            badgeColor = COLORS.warning
+        elseif actStr == "Patrol Scan" then
+            icon = "🗺️"
+            actStr = "วนสแกนทั่วแมพ (Patrol Scan)"
+            badgeColor = COLORS.warning
+        elseif actStr == "Opening Chest" then
+            icon = "📦"
+            actStr = "กำลังเปิดกล่อง (Opening Chest)"
+            badgeColor = COLORS.cyan
+        elseif actStr == "Triggering Spawn" then
+            icon = "⚡"
+            actStr = "กระตุ้นจุดเกิดมอน (Triggering Spawn)"
+            badgeColor = COLORS.warning
+        elseif actStr == "Portal" or actStr == "Moving To Portal" or actStr == "Entering Portal" then
             icon = "🌀"
             actStr = "กำลังไปประตูทางออก (Portal Exit)"
+            badgeColor = COLORS.cyan
+        elseif actStr == "Moving To Door" or actStr == "Entering Door" or actStr == "Opening Door" then
+            icon = "🚪"
+            actStr = "กำลังเปิดประตู (Door)"
             badgeColor = COLORS.cyan
         elseif actStr == "Play Again" then
             icon = "🔄"
@@ -3757,6 +4246,10 @@ local function updateStatusPanel()
             icon = "🚨"
             actStr = "ถอยหลบฉุกเฉิน (Emergency Escape)"
             badgeColor = COLORS.danger
+        elseif actStr == "Searching Exit" then
+            icon = "🔎"
+            actStr = "ค้นหาทางออก (Searching Exit)"
+            badgeColor = COLORS.warning
         else
             icon = "💤"
             actStr = "สแตนด์บาย (Idle)"
@@ -3858,12 +4351,23 @@ connect(RunService.Heartbeat, function(dt)
 
             if model and root and humanoid then
                 State.RoomClearTimer = 0
+                State.RoomClearConfirmTimer = 0
+                State.RoomClearConfirmed = false
             end
         end
     end
 
     if not State.TargetRoot or not targetIsValid() then
         State.RoomClearTimer += dt
+        -- RoomClearConfirmTimer เดินเฉพาะเมื่อ Confirmed = true
+        if State.RoomClearConfirmed then
+            State.RoomClearConfirmTimer += dt
+        end
+    else
+        -- พบมอน → reset ทุก timer
+        State.RoomClearTimer = 0
+        State.RoomClearConfirmTimer = 0
+        State.RoomClearConfirmed = false
     end
 
     if State.FallbackTargetTimer > 0 then
@@ -3903,12 +4407,24 @@ connect(RunService.Heartbeat, function(dt)
                     State.StageBusy = false
                     State.DoorBusy = false
                     State.RoomClearTimer = 0
+                    State.RoomClearConfirmTimer = 0
+                    State.RoomClearConfirmed = false
                     State.CurrentAction = "Recovering"
 
                     if Config.Debug then
                         warn("[IronSoul] stage error:", err)
                     end
                 end
+            end)
+        end
+
+        -- เปิดกล่องหลังห้องเคลียร์
+        if Config.AutoOpenChest
+            and not State.StageBusy
+            and not State.ChestBusy
+            and (not State.TargetRoot or not targetIsValid()) then
+            task.spawn(function()
+                pcall(findAndOpenChests)
             end)
         end
     end
@@ -3933,14 +4449,38 @@ connect(RunService.Heartbeat, function(dt)
         State.CurrentAction = "Farming"
     end
 
+    -- SkillInterval ตอนนี้ทำหน้าที่เป็น min-poll เท่านั้น
+    -- useSkills() ตรวจ cooldown แต่ละ key เอง
     State.SkillTimer += dt
 
-    if State.SkillTimer >= Config.SkillInterval then
+    if State.SkillTimer >= 0.15 then   -- poll ทุก 150ms
         State.SkillTimer = 0
 
-        if Config.AutoSkill and targetIsValid() then
+        if Config.AutoSkill and targetIsValid() and not State.StageBusy then
             task.spawn(useSkills)
         end
+    end
+
+    -- Portal stuck detector: ถ้าอยู่หน้าวาปนาน > PortalStuckTimeout
+    -- แต่ยังเข้าไม่ได้ → teleport เข้าโดยตรง
+    if State.Portal and State.Portal.Parent and State.Root then
+        local pPos = State.Portal.Position
+        local dSq  = (State.Root.Position - pPos)
+        if dSq:Dot(dSq) < 30 * 30 then
+            State.PortalStuckTimer += dt
+            if State.PortalStuckTimer >= Config.PortalStuckTimeout and not State.StageBusy then
+                State.PortalStuckTimer = 0
+                pcall(function()
+                    -- nudge เข้าตรงๆ
+                    State.Root.CFrame = CFrame.new(pPos)
+                    State.Root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end)
+            end
+        else
+            State.PortalStuckTimer = 0
+        end
+    else
+        State.PortalStuckTimer = 0
     end
 end)
 
