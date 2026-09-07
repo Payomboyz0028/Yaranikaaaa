@@ -16,8 +16,8 @@ local LuarmorConfig = {
     VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start",
-    LoaderURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/LoaderPBG",
+    StartURL = "https://flowauth.net/v1/loaders/2f15198975f2ad481c5662d42ed211ed.lua",
+    LoaderURL = "https://flowauth.net/v1/loaders/2f15198975f2ad481c5662d42ed211ed.lua",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
