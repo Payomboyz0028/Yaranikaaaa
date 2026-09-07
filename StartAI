@@ -30,7 +30,7 @@ local LuarmorConfig = {
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
     StartURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/StartAI",
     LuarmorLoaderURL = "https://api.luarmor.net/files/v4/loaders/0d9bc7b387597d579a4c9fea25658468.lua",
-    LoaderURL = "https://raw.githubusercontent.com/aslamdunk21/payomboyg/refs/heads/main/AIPro",
+    LoaderURL = "https://flowauth.net/v1/loaders/b9d4d03449141f46295638ae1ce545b3.lua",
     SpecialKey = "PAYOMVVIP280342PBGZ19"
 }
 
