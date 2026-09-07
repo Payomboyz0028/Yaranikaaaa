@@ -8,19 +8,22 @@ if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
--- 1. ตั้งค่า Key กลางสำหรับ FlowAuth (HWIDless Key)
+-- 1. ตั้งค่า Key กลางสำหรับ FlowAuth (ใช้ส่งผ่านพารามิเตอร์เท่านั้น ไม่ทับ script_key ของผู้เล่น)
 local FLOWAUTH_KEY = "1HSDmI2yqaqA1ayodDaUysDNoKPA"
 local FLOWAUTH_LOGIN_URL = "https://flowauth.net/v1/loaders/2f15198975f2ad481c5662d42ed211ed.lua"
 local GITHUB_START_FALLBACK = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"
 
--- ส่งคีย์เข้า Global Environment เพื่อให้ทุกระบบในเครือข่ายดึงไปใช้ได้ทันที
+-- บันทึกคีย์ที่ผู้เล่นกรอกมาจากตัวรัน (เช่น Luarmor Key หรือ VVIP Key) เก็บไว้ไม่ให้หาย
 pcall(function()
-    if getgenv then
-        getgenv().script_key = FLOWAUTH_KEY
-        getgenv().PayomboyZ_FlowAuthKey = FLOWAUTH_KEY
+    local realUserKey = (getgenv and getgenv().script_key) 
+                     or _G.script_key 
+                     or shared.script_key 
+                     or (type(script_key) == "string" and script_key)
+                     or ""
+    if realUserKey ~= "" and realUserKey ~= FLOWAUTH_KEY then
+        if getgenv then getgenv().PayomboyZ_UserKey = realUserKey end
+        _G.PayomboyZ_UserKey = realUserKey
     end
-    _G.script_key = FLOWAUTH_KEY
-    if shared then shared.script_key = FLOWAUTH_KEY end
 end)
 
 -- 2. ฟังก์ชันโหลด Start2.txt (เช็คไฟล์เครื่องก่อน -> ถ้าไม่มีโหลดผ่าน FlowAuth -> ถ้าติดขัดโหลดจาก GitHub)
