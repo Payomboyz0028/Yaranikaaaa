@@ -503,7 +503,7 @@ function TaskPoolEngine:BuildPool(state, stage)
             id = "V2_FLOWER_QUEST", stage = "STAGE_V2",
             prio = 6, value = 130, urgency = 9, pSuccess = 0.85, window = 1.0, execTime = 240, risk = 15,
             pos = Vector3.new(1250, 40, -5100), age = 0,
-            feasible = function() return stage == "STAGE_V2" and (getgenv().Configs == nil or getgenv().Configs.AutoV2_V3) end,
+            feasible = function() return stage == "STAGE_V2" and (getgenv().Configs and getgenv().Configs.AutoV2_V3 == true) end,
             run = function()
                 FragileMode:Enter()
                 local bp = LP and LP:FindFirstChild("Backpack")
@@ -648,10 +648,17 @@ task.spawn(function()
 
             table.sort(pool, function(a, b) return a.score > b.score end)
 
-            local bestTask = pool[1]
+            local bestTask = nil
+            for _, t in ipairs(pool) do
+                if t.feasible and t.feasible() then
+                    bestTask = t
+                    break
+                end
+            end
+
             local currentTaskOwner = Controller:Current()
 
-            if bestTask and bestTask.feasible() then
+            if bestTask then
                 local currentScore = 0
                 if currentTaskOwner then
                     for _, t in ipairs(pool) do
