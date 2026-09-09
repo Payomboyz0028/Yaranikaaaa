@@ -191,10 +191,15 @@ function CheckQuest()
     
     if not questList then
         pcall(function()
-            if type(readfile) == "function" and isfile("BFSub.txt") then
+            if type(readfile) == "function" and type(isfile) == "function" and isfile("BFSub.txt") then
                 loadstring(readfile("BFSub.txt"))()
+            elseif type(readfile) == "function" and type(isfile) == "function" and isfile("BFSub.lua") then
+                loadstring(readfile("BFSub.lua"))()
             else
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/BFSub"))()
+                local ok, res = pcall(function() return game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/BFSub") end)
+                if ok and res and #res > 100 and not res:find("404: Not Found") then
+                    loadstring(res)()
+                end
             end
         end)
         questList = (curSea == 1 and getgenv().Sea1_Quests) or (curSea == 2 and getgenv().Sea2_Quests) or getgenv().Sea3_Quests
