@@ -500,7 +500,7 @@ local Cfg = {
     BoostWalkSpeed   = 16,
 
     -- survival
-    GodMode          = true,
+    GodMode          = false,
     AntiAFK          = true,
     MuteReports      = false,
 
@@ -568,217 +568,7 @@ local Runtime = {
     eggTick     = 0,
 }
 
-if typeof(hookmetamethod) == "function" and not _G["_DesyncAntiRagdollHooked"] then
-    _G["_DesyncAntiRagdollHooked"] = true
-    pcall(function()
-        local oldNewIndex
-        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
-            if not checkcaller() and typeof(self) == "Instance" then
-                if self:IsA("Motor6D") and (key == "Enabled" and value == false) then
-                    return nil
-                end
-                if self:IsA("Humanoid") then
-                    if key == "PlatformStand" and value == true then
-                        return nil
-                    end
-                    if key == "Sit" and value == true and (Runtime and (Runtime.stealing or (Cfg and Cfg.AutoSteal))) then
-                        return nil
-                    end
-                end
-            end
-            return oldNewIndex(self, key, value)
-        end))
-    end)
-end
-
-----------------------------------------------------------------
--- Config Persistence
-----------------------------------------------------------------
-local CFG_DIR, CFG_FILE, CFG_BACKUP, CFG_LEGACY_NYX, CFG_LEGACY =
-    HUB_DIR, HUB_DIR .. "/payomboyz_config.json", HUB_DIR .. "/payomboyz_config.bak.json", "NyxSAE/nyx_config.json", "NyxSAE/config.json"
-
-local hasFS = (typeof(writefile) == "function") and (typeof(readfile) == "function")
-if hasFS and typeof(makefolder) == "function" and not (isfolder and isfolder(CFG_DIR)) then
-    pcall(makefolder, CFG_DIR)
-end
-
-Runtime.cfgStatus = "ยังไม่ได้อ่านไฟล์"
-
-function fileExists(path)
-    if not hasFS then return false end
-    if typeof(isfile) ~= "function" then
-        local ok, body = pcall(readfile, path)
-        return ok and type(body) == "string" and #body > 0
-    end
-    local ok, yes = pcall(isfile, path)
-    return ok and yes == true
-end
-
-function readJson(path)
-    if not fileExists(path) then return nil end
-    local okr, body = pcall(readfile, path)
-    if not okr or type(body) ~= "string" or #body < 2 then return nil end
-    local okd, data = pcall(function() return HttpService:JSONDecode(body) end)
-    if not okd or type(data) ~= "table" then return nil end
-    return data
-end
-
-function saveConfig()
-    if uiBuilding then return false end
-    if not hasFS then
-        Runtime.cfgStatus = "executor นี้เขียนไฟล์ไม่ได้ — ค่าจะหายเมื่อออกเกม"
-        return false
-    end
-
-    local okEnc, body = pcall(function() return HttpService:JSONEncode(Cfg) end)
-    if not okEnc or type(body) ~= "string" then
-        Runtime.cfgStatus = "แปลงค่าเป็น JSON ไม่ได้"
-        return false
-    end
-
-    if fileExists(CFG_FILE) then
-        pcall(function()
-            local old = readfile(CFG_FILE)
-            if type(old) == "string" and #old > 2 then writefile(CFG_BACKUP, old) end
-        end)
-    end
-
-    local okW = pcall(writefile, CFG_FILE, body)
-    if not okW then
-        Runtime.cfgStatus = "เขียนไฟล์ไม่สำเร็จ"
-        return false
-    end
-
-    if readJson(CFG_FILE) == nil then
-        Runtime.cfgStatus = "เขียนแล้วอ่านกลับไม่ได้ — ไฟล์อาจถูกทับ"
-        return false
-    end
-
-    Runtime.cfgSavedAt = os.clock()
-    Runtime.cfgStatus  = ("บันทึกแล้ว %s"):format(os.date("%H:%M:%S"))
-    return true
-end
-
--- a slider drag fires the callback on every pixel; one disk write per pixel is
--- both pointless and a good way to catch a half-written file
-local cfgSavePending = false
-function saveConfigSoon()
-    if cfgSavePending then return end
-    cfgSavePending = true
-    task.delay(0.4, function()
-        cfgSavePending = false
-        saveConfig()
-    end)
-end
-
-function applyConfigTable(data)
-    for k, v in pairs(data) do
-        if Cfg[k] ~= nil then Cfg[k] = v end
-    end
-
-    if emptySet(Cfg.StealAreas) then
-        Cfg.StealAreas = {}
-        for _, a in ipairs(AREAS) do Cfg.StealAreas[a] = true end
-    end
-    if emptySet(Cfg.StealRarities) then Cfg.StealRarities = raritySet(RARITY_ORDER) end
-    if emptySet(Cfg.PlaceRarities) then Cfg.PlaceRarities = raritySet(RARITY_ORDER) end
-end
-
-function loadConfig()
-    if not hasFS then
-        Runtime.cfgStatus = "executor นี้อ่านไฟล์ไม่ได้ — ใช้ค่าเริ่มต้น"
-        return false
-    end
-
-    local data, from = readJson(CFG_FILE), CFG_FILE
-    if not data then data, from = readJson(CFG_BACKUP), CFG_BACKUP end
-    if not data then data, from = readJson(CFG_LEGACY_NYX), CFG_LEGACY_NYX end
-    if not data then data, from = readJson(CFG_LEGACY), CFG_LEGACY end
-
-    if not data then
-        Runtime.cfgStatus = "ยังไม่มีไฟล์ค่าที่บันทึกไว้ — ใช้ค่าเริ่มต้น"
-        return false
-    end
-
-    applyConfigTable(data)
-    local n = 0
-    for _ in pairs(data) do n += 1 end
-    Runtime.cfgStatus = ("โหลด %d ค่าจาก %s"):format(n, from)
-    if from ~= CFG_FILE then saveConfig() end
-
-    -- บังคับปิดสวิตช์การทำงานอัตโนมัติเมื่อเริ่มสคริปต์ เพื่อป้องกันตัวละครทำงานเองหรือเด้งกลับบ้าน
-    Cfg.AutoSteal = false
-    Cfg.AutoHatch = false
-    Cfg.AutoPlace = false
-    Cfg.AutoEquipBest = false
-    Cfg.AutoTreadmill = false
-    Cfg.AutoSellPets = false
-    Cfg.AutoSellEggs = false
-    Cfg.AutoRift     = false
-    return true
-end
-loadConfig()
-
-function webhook(title, desc)
-    if Cfg.WebhookURL == "" then return end
-    local req = (typeof(request) == "function" and request)
-        or (typeof(http_request) == "function" and http_request)
-    if not req then return end
-    task.spawn(function()
-        pcall(function()
-            req({
-                Url = Cfg.WebhookURL,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode({
-                    username = HUB_NAME .. " | Steal An Egg",
-                    embeds = { { title = title, description = desc, color = 0x8B5CF6,
-                        footer = { text = (LocalPlayer and LocalPlayer.Name or "Player") .. " • " .. os.date("%H:%M:%S") } } },
-                }),
-            })
-        end)
-    end)
-end
-
-function logLine(kind, text)
-    table.insert(Runtime.log, 1, ("[%s] %s"):format(os.date("%H:%M:%S"), text))
-    for i = #Runtime.log, 41, -1 do Runtime.log[i] = nil end
-end
-
-----------------------------------------------------------------
--- NoKnockback (Safe Mode - handled via Ragdoll Constraints & Metamethod)
-----------------------------------------------------------------
--- Speed heartbeat enforce removed to match ใช้ได้.lua
-
--- Global InstantInteract PPS hooks removed to comply with BAC-1512
-
-----------------------------------------------------------------
--- Passive Income Meter
-----------------------------------------------------------------
--- Measured 2026-08-17: `ActiveAssets: MoneyCollected` fires once per payout as
--- `({ {uid = <pet uid>, amount = <number>}, ... }, isLocal)`. Listening is the
--- only way to know real earnings without calling Save.Get on a timer, which is
--- exactly the polling an all-night AFK session must not do.
-Runtime.income = { total = 0, since = os.clock(), last = 0, lastAt = 0 }
-
-do
-    local eventName = (type(NET.ActiveAssets) == "table" and NET.ActiveAssets.MONEY_COLLECTED_EVENT) or "ActiveAssets: MoneyCollected"
-    local ev = NetworkFolder and NetworkFolder:FindFirstChild(tostring(eventName))
-    if ev and ev:IsA("RemoteEvent") then
-        Runtime.conns.money = ev.OnClientEvent:Connect(function(list, isLocal)
-            if isLocal ~= true or type(list) ~= "table" then return end
-            local sum = 0
-            for _, row in pairs(list) do
-                if type(row) == "table" then sum += tonumber(row.amount) or 0 end
-            end
-            if sum <= 0 then return end
-            local inc = Runtime.income
-            inc.total += sum
-            inc.last   = sum
-            inc.lastAt = os.clock()
-        end)
-    end
-end
+-- hookmetamethod removed for pure clean execution
 
 function incomePerSec()
     local inc = Runtime.income
@@ -1524,23 +1314,11 @@ end
 
 local function applyGodMode(enabled)
     local c = char()
-    if not c then return end
-    local hum = c:FindFirstChildOfClass("Humanoid")
+    local hum = c and c:FindFirstChildOfClass("Humanoid")
     if hum then
         pcall(function()
-            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, not enabled)
-            if enabled and hum.Health < hum.MaxHealth then
-                hum.Health = hum.MaxHealth
-            end
+            hum.BreakJointsOnDeath = false
         end)
-    end
-    if enabled then
-        for _, part in ipairs(c:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanTouch = false
-                part.CanCollide = false
-            end
-        end
     end
     yq(c)
 end
@@ -1558,36 +1336,12 @@ end
 
 local function doHumanoidSwap(charInst)
     charInst = charInst or char()
-    if not charInst then return false end
-    local origHum = charInst:FindFirstChildOfClass("Humanoid")
-    if not origHum then return false end
-
-    pcall(function()
-        origHum.BreakJointsOnDeath = false
-        local cloneHum = origHum:Clone()
-        cloneHum.Parent = charInst
-        origHum:Destroy()
-
-        local anim = cloneHum:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHum)
-        workspace.CurrentCamera.CameraSubject = cloneHum
-
-        local animate = charInst:FindFirstChild("Animate")
-        if animate and animate:IsA("LocalScript") then
-            animate.Disabled = true
-            task.defer(function()
-                task.wait(0.05)
-                animate.Disabled = false
-            end)
-        end
-
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-        cloneHum.JumpPower = math.max(50, cloneHum.JumpPower)
-        cloneHum.JumpHeight = math.max(7.2, cloneHum.JumpHeight)
-        cloneHum:ChangeState(Enum.HumanoidStateType.Running)
-    end)
+    local hum = charInst and charInst:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum.BreakJointsOnDeath = false
+        end)
+    end
     Hq(charInst)
     return true
 end
@@ -3365,10 +3119,14 @@ local function secureEggGuardStrike(uid, targetCFrame, targetModel)
 
     -- [Step 1] Lifting target egg into hands
     local t1 = os.clock() + 3.5
+    local lastInv1 = 0
     while not isEggSecured(uid) and os.clock() < t1 and alive() and (Runtime.stealing or (Cfg and Cfg.AutoSteal)) do
         root.CFrame = targetCF * CFrame.new(0, 0.4, 0)
         fireAllEggPrompts(targetModel, targetPos)
-        invokeCarryRemote(uid, Guardless and Guardless.slotKey and Guardless.slotKey({ Uid = uid }))
+        if os.clock() - lastInv1 >= 0.4 then
+            lastInv1 = os.clock()
+            invokeCarryRemote(uid, Guardless and Guardless.slotKey and Guardless.slotKey({ Uid = uid }))
+        end
         RunService.Heartbeat:Wait()
     end
 
@@ -3391,10 +3149,14 @@ local function secureEggGuardStrike(uid, targetCFrame, targetModel)
 
     -- [Step 3] Re-grabbing egg immediately after strike
     local t3 = os.clock() + 3.0
+    local lastInv3 = 0
     while not isEggSecured(uid) and os.clock() < t3 and alive() and (Runtime.stealing or (Cfg and Cfg.AutoSteal)) do
         root.CFrame = targetCF * CFrame.new(0, 0.4, 0)
         fireAllEggPrompts(targetModel, targetPos)
-        invokeCarryRemote(uid, Guardless and Guardless.slotKey and Guardless.slotKey({ Uid = uid }))
+        if os.clock() - lastInv3 >= 0.4 then
+            lastInv3 = os.clock()
+            invokeCarryRemote(uid, Guardless and Guardless.slotKey and Guardless.slotKey({ Uid = uid }))
+        end
         RunService.Heartbeat:Wait()
     end
 
@@ -3478,9 +3240,13 @@ local function executeMasterSteal(rec)
 
             -- Lift Lake Egg
             local tLake = os.clock() + 3.0
+            local lastLakeInv = 0
             while not isHoldingInHands(lakeEgg.Uid) and os.clock() < tLake and alive() and (Runtime.stealing or (Cfg and Cfg.AutoSteal)) do
                 fireAllEggPrompts(lakeEgg.Model, lakePos)
-                invokeCarryRemote(lakeEgg.Uid)
+                if os.clock() - lastLakeInv >= 0.4 then
+                    lastLakeInv = os.clock()
+                    invokeCarryRemote(lakeEgg.Uid)
+                end
                 RunService.Heartbeat:Wait()
             end
 
@@ -4230,26 +3996,7 @@ function withLock(fn, ...)
     return ok
 end
 
-job("respawn", 3, function()
-    local c = char()
-    local orphan = (c == nil) or (c.Parent == nil) or (not c:IsDescendantOf(Workspace))
-    if not orphan then
-        Runtime.orphanSince = nil
-        return
-    end
-
-    Runtime.orphanSince = Runtime.orphanSince or os.clock()
-    local stuckFor = os.clock() - Runtime.orphanSince
-
-    local askedAgo = Runtime.resetAskedAt and (os.clock() - Runtime.resetAskedAt) or math.huge
-    if stuckFor > 5 and askedAgo > 10 then
-        Runtime.resetAskedAt = os.clock()
-        logLine("move", ("ตัวละครหาย %ds — ขอเกิดใหม่"):format(math.floor(stuckFor)))
-        pcall(function()
-            local net = ReplicatedStorage:FindFirstChild("Network")
-            local rr  = net and net:FindFirstChild("ClientCharacter: RequestCharacterReset")
-            if rr then rr:FireServer() end
-        end)
+-- job("respawn") removed (prevented 2518)
     end
 
     if stuckFor > 30 and not Runtime.orphanHopped then
@@ -4259,19 +4006,7 @@ job("respawn", 3, function()
     end
 end)
 
-job("upkeep", 2, function()
-    if Cfg.AutoSteal and Nav.onTreadmill() then
-        logLine("move", "ติดลู่วิ่ง — ออกจากลู่")
-        Nav.leaveTreadmill()
-    end
-    enforceWalkSpeed()
-    if Cfg.GodMode then
-        local hum = humanoid()
-        if hum and hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
-        if hum and not Runtime.conns.health then hardenCharacter() end
-    end
-    Runtime.instantReady = killClientIntegrity()
-end)
+-- job("upkeep") removed (prevented 2518)
 
 -- Hatching and placing were starving. The steal thread holds Runtime.stealing
 -- for a chain of up to 20 grabs and only drops it for ~0.35s between chains, so
