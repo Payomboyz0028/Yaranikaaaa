@@ -748,38 +748,9 @@ end
 ----------------------------------------------------------------
 -- NoKnockback (Safe Mode - handled via Ragdoll Constraints & Metamethod)
 ----------------------------------------------------------------
-----------------------------------------------------------------
--- Speed Boost (Safe Heartbeat Enforce)
-----------------------------------------------------------------
-do
-    RunService.Heartbeat:Connect(function()
-        local hum = humanoid()
-        if hum and hum.WalkSpeed < (Cfg.BoostWalkSpeed or 16) then
-            pcall(function() hum.WalkSpeed = Cfg.BoostWalkSpeed or 16 end)
-        end
-    end)
-    logLine("init", "Speed: Safe Heartbeat enforce active")
-end
+-- Speed heartbeat enforce removed to match ใช้ได้.lua
 
-----------------------------------------------------------------
--- InstantInteract — ยกเลิก HoldDuration บน CarryAreaEgg prompt
--- ทำให้ไม่ต้อง hold นิ้วค้างเพื่อหยิบไข่
-----------------------------------------------------------------
-do
-    local PPS = game:GetService("ProximityPromptService")
-    PPS.PromptButtonHoldBegan:Connect(function(prompt, player)
-        if player == LocalPlayer and tostring(prompt.Name) == "CarryAreaEgg" then
-            pcall(function() prompt.HoldDuration = 0 end)
-        end
-    end)
-    -- ยังจับ PromptTriggered ไว้ด้วยเผื่อ HoldDuration ไม่ทัน set
-    PPS.PromptShown:Connect(function(prompt, inputType)
-        if tostring(prompt.Name) == "CarryAreaEgg" then
-            pcall(function() prompt.HoldDuration = 0 end)
-        end
-    end)
-    logLine("init", "InstantInteract: CarryAreaEgg HoldDuration=0 ready")
-end
+-- Global InstantInteract PPS hooks removed to comply with BAC-1512
 
 ----------------------------------------------------------------
 -- Passive Income Meter
@@ -1055,35 +1026,11 @@ end
 -- the corrector restores once per sample, this restores once per frame on every
 -- step signal, so the position that replicates is ours
 local function pin(pos)
-    local stopped = false
-    local conns = {}
-
-    local function apply()
-        if stopped then return end
-        local root = hrp()
-        if root then
-            root.CFrame = CFrame.new(pos)
-            root.AssemblyLinearVelocity = Vector3.zero
-        end
+    local root = hrp()
+    if root then
+        root.CFrame = CFrame.new(pos)
     end
-
-    conns[#conns + 1] = RunService.Heartbeat:Connect(apply)
-    if not isMobileDevice then
-        pcall(function() conns[#conns + 1] = RunService.PreSimulation:Connect(apply) end)
-        pcall(function() conns[#conns + 1] = RunService.PostSimulation:Connect(apply) end)
-        if RunService:IsClient() then
-            pcall(function() conns[#conns + 1] = RunService.RenderStepped:Connect(apply) end)
-        end
-    end
-
-    apply()
-    Runtime.pinConns = conns
-    return function()
-        if stopped then return end
-        stopped = true
-        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
-        if Runtime.pinConns == conns then Runtime.pinConns = nil end
-    end
+    return function() end
 end
 
 local function waitPinned(pos, tol, timeout)
@@ -2670,60 +2617,24 @@ local function nearestCarryPrompt(pos, maxDist)
     return best
 end
 
-local function HookProximityPrompts()
-    pcall(function()
-        local PPS = game:GetService("ProximityPromptService")
-        for _, pp in ipairs(Workspace:GetDescendants()) do
-            if pp:IsA("ProximityPrompt") then
-                pp.HoldDuration = 0
-                pp.MaxActivationDistance = 9999
-                pp.RequiresLineOfSight = false
-                pp.Enabled = true
-            end
-        end
-        PPS.PromptShown:Connect(function(pp)
-            if pp and pp:IsA("ProximityPrompt") then
-                pp.HoldDuration = 0
-                pp.MaxActivationDistance = 9999
-                pp.RequiresLineOfSight = false
-                pp.Enabled = true
-            end
-        end)
-        PPS.PromptButtonHoldBegan:Connect(function(pp, pl)
-            if pl == LocalPlayer and pp and pp:IsA("ProximityPrompt") then
-                pp.HoldDuration = 0
-            end
-        end)
-    end)
-end
-HookProximityPrompts()
+-- HookProximityPrompts removed (caused BAC-1512 due to MaxActivationDistance=9999)
 
 local function triggerPrompt(prompt)
     if not prompt or not prompt:IsA("ProximityPrompt") then return false end
     pcall(function()
-        prompt.HoldDuration = 0
-        prompt.MaxActivationDistance = 9999
         prompt.RequiresLineOfSight = false
-        prompt.Enabled = true
+        prompt.HoldDuration = 0
     end)
 
     local firePP = (typeof(fireproximityprompt) == "function" and fireproximityprompt)
         or (typeof(getgenv) == "function" and getgenv().fireproximityprompt)
 
-    local fired = false
     if firePP then
-        local ok = pcall(firePP, prompt, 0)
-        if not ok then ok = pcall(firePP, prompt) end
-        if ok then fired = true end
+        pcall(firePP, prompt, 0)
+        pcall(firePP, prompt)
+        return true
     end
-    if not fired then
-        pcall(function()
-            prompt:InputHoldBegin()
-            task.wait(prompt.HoldDuration or 0)
-            prompt:InputHoldEnd()
-        end)
-    end
-    return true
+    return false
 end
 
 ----------------------------------------------------------------
@@ -8761,11 +8672,7 @@ if LocalPlayer then
         end)
     end)
 
-    Runtime.conns.promptInstant = ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt, player)
-        if player == LocalPlayer and (tostring(prompt) == "CarryAreaEgg" or (prompt.Name and prompt.Name:find("Egg"))) then
-            prompt.HoldDuration = 0
-        end
-    end)
+    -- promptInstant connection removed
 
 -- velocityDamp removed to comply with server anti-cheat
 end
