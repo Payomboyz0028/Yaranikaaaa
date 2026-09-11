@@ -522,8 +522,8 @@ local Cfg = {
 
     -- progression
     AutoBaseUpgrade  = false,
-    AutoTreadmillUp  = false,
-    AutoTreadmill    = false,
+    -- AutoTreadmillUp removed
+    -- AutoTreadmill removed
     AutoTrails       = false,
     AutoFuse         = false,
     AutoClaim        = false,
@@ -1004,6 +1004,48 @@ local function stepGroundY(pos)
     return 70.3
 end
 
+----------------------------------------------------------------
+-- Treadmill Anti-Touch & Collision Neutralizer (1:1 with ใช้ได้.lua Cq)
+----------------------------------------------------------------
+local function disableTreadmillTouching()
+    pcall(function()
+        local plots = Workspace:FindFirstChild("Plots")
+        if plots then
+            for _, plot in ipairs(plots:GetChildren()) do
+                local bottom = plot:FindFirstChild("TreadmillBottom")
+                if bottom and bottom:IsA("BasePart") then
+                    bottom.CanTouch = false
+                    bottom.CanCollide = false
+                end
+                local upg = plot:FindFirstChild("TreadmillUpgrade")
+                if upg then
+                    for _, part in ipairs(upg:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanTouch = false
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+pcall(disableTreadmillTouching)
+
+Workspace.DescendantAdded:Connect(function(inst)
+    if inst.Name == "TreadmillBottom" and inst:IsA("BasePart") then
+        inst.CanTouch = false
+        inst.CanCollide = false
+    elseif inst.Name == "TreadmillUpgrade" and inst:IsA("Model") then
+        for _, part in ipairs(inst:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanTouch = false
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
 local Nav = { GuardRing = 26 }
 
 function Nav.guardPivots()
@@ -1141,7 +1183,7 @@ function Nav.leaveTreadmill()
         local rep = game:GetService("ReplicatedStorage")
         local doff = rep:FindFirstChild("RF/Treadmill/AskDoff", true)
         if doff and doff:IsA("RemoteFunction") then
-            doff:InvokeServer()
+            task.spawn(function() pcall(function() doff:InvokeServer() end) end)
         end
     end)
 
@@ -1149,17 +1191,27 @@ function Nav.leaveTreadmill()
     local h = humanoid()
     if h then
         pcall(function()
-            h.Sit = false
-            h.PlatformStand = false
             for _, track in ipairs(h:GetPlayingAnimationTracks()) do
                 local anim = track.Animation
                 local id = anim and anim.AnimationId or ""
                 local name = track.Name:lower()
                 if id:find("10921259953") or name:find("treadmill") or name:find("run") then
-                    track:Stop(0.1)
+                    track:Stop(0)
                 end
             end
+            h.PlatformStand = false
+            h.Sit = false
+            h:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+            h:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+            h:ChangeState(Enum.HumanoidStateType.Running)
         end)
+    end
+
+    local lp = game:GetService("Players").LocalPlayer
+    local pg = lp and lp:FindFirstChild("PlayerGui")
+    if pg then
+        local spAnim = pg:FindFirstChild("SpeedGainAnimation")
+        if spAnim then pcall(function() spAnim:Destroy() end) end
     end
 
     local root = hrp()
@@ -1168,49 +1220,10 @@ function Nav.leaveTreadmill()
         root.AssemblyAngularVelocity = Vector3.zero
     end
 
-    local on, plate = Nav.onTreadmill()
-    if on and root and plate then
-        local dir = plate.CFrame.LookVector
-        dir = Vector3.new(dir.X, 0, dir.Z)
-        if dir.Magnitude < 0.1 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
-        local away = root.Position + dir * 22
-        root.CFrame = CFrame.new(away.X, math.max(68, away.Y), away.Z)
-        root.AssemblyLinearVelocity = Vector3.zero
-        task.wait(0.06)
-    end
-
-    return not Nav.onTreadmill()
-end
-
-function Nav.toTreadmill()
-    if os.clock() - (Nav.lastTreadmillMount or 0) < 2 then return false end
-    Nav.lastTreadmillMount = os.clock()
-
-    local myPlot = getMyPlot()
-    local plate = nil
-    if myPlot then
-        plate = myPlot:FindFirstChild("TreadmillBottom", true) or myPlot:FindFirstChild("Treadmill", true)
-    end
-    if not plate then
-        for _, pl in ipairs(Nav.treadmillPlates()) do
-            if pl.Parent then plate = pl break end
-        end
-    end
-    if not plate then return false, "ไม่พบลู่วิ่ง" end
-
-    local root = hrp()
-    local hum = humanoid()
-    if not root or not hum then return false end
-
-    local platePos = plate.Position + Vector3.new(0, plate.Size.Y * 0.5 + 2.6, 0)
-    root.CFrame = CFrame.new(platePos)
-    root.AssemblyLinearVelocity = Vector3.zero
-
-    -- Face along belt and walk
-    local lookDir = plate.CFrame.LookVector
-    hum:Move(Vector3.new(lookDir.X, 0, lookDir.Z).Unit, false)
     return true
 end
+
+function Nav.toTreadmill() return false end
 
 local function toAnchor()
     if instantOK() then
@@ -3392,20 +3405,7 @@ local function baseUpgradeStep()
     saveCache, petCache = nil, nil
 end
 
-local function treadmillUpgradeStep()
-    if not TreadDir or not TreadDir.GetByUpgradeLevel then return end
-    local data = saveData()
-    local lvl  = tonumber(data.TreadmillUpgradeLevel) or 0
-
-    local ok, nextTm = pcall(TreadDir.GetByUpgradeLevel, lvl + 1)
-    if not ok or type(nextTm) ~= "table" then return end
-    local price = tonumber(nextTm.Price) or math.huge
-    if moneyNow() < price then return end
-
-    invoke(NET.Treadmills.REQUEST_UPGRADE, nextTm._id)
-    logLine("treadmill", ("อัปลู่วิ่งเป็น %s (%s)"):format(nextTm.DisplayName or nextTm._id, shortNum(price)))
-    saveCache, petCache = nil, nil
-end
+local function treadmillUpgradeStep() end
 
 local function trailsStep()
     if not TrailsDir or not TrailsDir.Directory then return end
@@ -4044,7 +4044,7 @@ end)
 
 job("progress", 1, function()
     if Cfg.AutoBaseUpgrade then pcall(baseUpgradeStep) end
-    if Cfg.AutoTreadmillUp then pcall(treadmillUpgradeStep) end
+    
 end)
 
 job("eggESP", 1, function()
@@ -4259,177 +4259,7 @@ task.spawn(function()
 
         local actionTaken = false
 
-        -- ================================================================
-        -- 🌟 PRIORITY 1: ขโมยไข่ (STEAL EGGS)
-        -- ================================================================
-        -- Steal is the primary task! Runs ONLY when the curtain barrier is OPEN and it is daylight.
-        if Cfg.AutoSteal and not curtainClosed and secUntilDawn > 3 and not Runtime.stealing then
-            -- Relieve bag if full
-            if bagCount() >= EGG_BAG_CAP - 3 then
-                if Cfg.AutoHatch then hatchReady() end
-                if Cfg.AutoPlace then placeEggs() end
-            end
-
-            local target = bestEgg()
-            if target and bagCount() < EGG_BAG_CAP then
-                actionTaken = true
-
-                -- CRITICAL: Must dismount treadmill completely before attempting any steal!
-                if Nav.onTreadmill() then
-                    Nav.leaveTreadmill()
-                end
-
-                local ok, err
-                if instantOK() or Cfg.MoveMode == "Instant" then
-                    ok, err = instantSteal(target)
-                elseif Cfg.MoveMode == "TP" then
-                    ok, err = tpSteal(target)
-                elseif Cfg.MoveMode == "Warp" then
-                    ok, err = warpSteal(target)
-                else
-                    ok, err = stealOnce(target)
-                end
-
-                if not ok then
-                    Runtime.lastError = tostring(err)
-                    if tostring(err):find("carrying") or tostring(err):find("Already") then
-                        pcall(function()
-                            local drop = ReplicatedStorage.Packages.Networking:FindFirstChild("RF/EggWorld/AskFieldEggDrop", true)
-                            if drop and drop:IsA("RemoteFunction") then drop:InvokeServer({}) end
-                        end)
-                        task.wait(0.2)
-                    end
-                end
-            end
-        end
-
-        -- If Steal is idle, no wanted eggs remain, or curtain is closed, proceed to secondary priorities
-        if not actionTaken and not Runtime.stealing then
-            -- ============================================================
-            -- 🥚 PRIORITY 2 & 3: วางไข่ & ฟักไข่ (PLACE & HATCH EGGS)
-            -- ============================================================
-            -- 1. Check if any currently placed eggs are ready to hatch
-            local hasReadyEggs = false
-            if Cfg.AutoHatch then
-                for uid, rec in pairs(myRuntimeRecords()) do
-                    if rec.Placement then
-                        local ready = false
-                        if EggState and EggState.IsReadyToHatch then
-                            local rOk, r = pcall(EggState.IsReadyToHatch, uid)
-                            if rOk and r then ready = true end
-                        elseif EggCmds and EggCmds.IsLocalEggReady then
-                            local rOk, r = pcall(EggCmds.IsLocalEggReady, uid)
-                            if rOk and r then ready = true end
-                        end
-                        if ready then hasReadyEggs = true break end
-                    end
-                end
-            end
-
-            -- If eggs are ready to hatch -> Execute Priority 3 (Hatch) first!
-            if hasReadyEggs and Cfg.AutoHatch then
-                if Nav.onTreadmill() then Nav.leaveTreadmill() end
-                local hatched = hatchReady()
-                if hatched > 0 then
-                    markSellDirty()
-                    actionTaken = true
-                end
-            end
-
-            -- 2. Check if we have space in pen (< 15 eggs) and unplaced eggs in bag -> Priority 2 (Place)
-            -- STRICT NO-BOUNCE GUARD: Check cooldown and verify eggs match before dismounting or moving!
-            if Cfg.AutoPlace and (os.clock() - (Runtime.lastPlaceAttempt or 0) > 3) then
-                local occupied = occupiedSpots()
-                local numPlaced = #occupied
-                if numPlaced < 15 then
-                    local unplaced = unplacedEggs()
-                    local canPlaceAny = false
-                    if #unplaced > 0 then
-                        for _, egg in ipairs(unplaced) do
-                            if isPlaceRarityAllowed and isPlaceRarityAllowed(egg.rarity) then
-                                canPlaceAny = true
-                                break
-                            end
-                        end
-                    end
-
-                    if canPlaceAny then
-                        if Nav.onTreadmill() then Nav.leaveTreadmill() end
-                        local placedCount = placeEggs()
-                        Runtime.lastPlaceAttempt = os.clock()
-                        if placedCount > 0 then
-                            actionTaken = true
-                            if Cfg.AutoHatch then hatchReady() end
-                        else
-                            Runtime.lastPlaceAttempt = os.clock() + 4
-                        end
-                    end
-                end
-            end
-
-            -- ============================================================
-            -- 🌀 PRIORITY 3.5: ผสมสัตว์ THE RIFT (THE RIFT AUTO FUSION)
-            -- ============================================================
-            if not actionTaken and Cfg.AutoRift then
-                local ok, fused = pcall(riftStep)
-                if ok and fused then
-                    actionTaken = true
-                    markSellDirty()
-                end
-            end
-
-            -- ============================================================
-            -- 💰 PRIORITY 4: ขายสัตว์ (SELL PETS)
-            -- ============================================================
-            -- Runs after placing and hatching are done.
-            -- Safely sells lowest priced pets while strictly protecting 1B+ pets.
-            if not actionTaken and Cfg.AutoSellPets then
-                local plan = sellPetPlan()
-                if #plan > 0 then
-                    local cap = math.min(#plan, math.max(1, Cfg.SellMaxPerRun or 15))
-                    local sold = 0
-                    for _, p in ipairs(plan) do
-                        if sold >= cap then break end
-                        if invoke(NET.ActiveAssets.REQUEST_SELL, p.uid) then
-                            sold += 1
-                            Runtime.stats.soldPets += 1
-                        end
-                        task.wait(0.04)
-                    end
-                    if sold > 0 then
-                        saveCache, petCache = nil, nil
-                        actionTaken = true
-                    end
-                end
-            end
-
-            -- ============================================================
-            -- 🏃 PRIORITY 5: วิ่งลู่วิ่ง (TREADMILL FARM)
-            -- ============================================================
-            -- When Priorities 1-4 have completed and there's nothing else to do:
-            if not actionTaken and not Runtime.stealing then
-                if Cfg.AutoTreadmill then
-                    local on, plate = Nav.onTreadmill()
-                    if not on then
-                        Nav.toTreadmill()
-                    else
-                        -- Keep walking on treadmill belt
-                        local hum = humanoid()
-                        if hum and plate then
-                            local lookDir = plate.CFrame.LookVector
-                            hum:Move(Vector3.new(lookDir.X, 0, lookDir.Z).Unit, false)
-                        end
-                    end
-                else
-                    if Nav.onTreadmill() then
-                        Nav.leaveTreadmill()
-                    end
-                end
-            else
-                if Nav.onTreadmill() then
-                    Nav.leaveTreadmill()
-                end
-            end
+        -- Priority 5 (Treadmill Farm) removed to match ใช้ได้.lua
         end
 
         task.wait(0.12)
@@ -6626,25 +6456,7 @@ task.spawn(function()
         Callback = function(v) Cfg.PlaceRarities = toSet(v) saveConfig() end,
     })
 
-    TabFarm:Section({ Title = "ฟาร์มความเร็วลู่วิ่ง (Treadmill Farm)" })
-
-    local treadmillToggleProg -- forward declaration
-
-    local treadmillToggleFarm = TabFarm:Toggle({
-        Title = "วิ่งลู่วิ่งอัตโนมัติ (AFK Treadmill)",
-        Desc  = "วิ่งลู่วิ่งเมื่อไม่มีงานอื่น — ปิดเพื่อให้ตัวละครยืนนิ่งเฉยๆ แทน",
-        Value = Cfg.AutoTreadmill,
-        Callback = function(v)
-            Cfg.AutoTreadmill = isOn(v)
-            if not Cfg.AutoTreadmill then
-                task.spawn(function() pcall(Nav.leaveTreadmill) end)
-            end
-            if treadmillToggleProg and treadmillToggleProg.SetValue and treadmillToggleProg.Value ~= Cfg.AutoTreadmill then
-                treadmillToggleProg:SetValue(Cfg.AutoTreadmill)
-            end
-            saveConfig()
-        end,
-    })
+    -- Treadmill toggle removed from Farm Tab
 
     ----------------------------------------------------------------
     -- Tab: Sell
@@ -6760,32 +6572,16 @@ task.spawn(function()
     ----------------------------------------------------------------
     local ProgBox = TabProg:Paragraph({ Title = "ความคืบหน้า", Desc = "กำลังอ่านข้อมูล..." })
 
-    treadmillToggleProg = TabProg:Toggle({
-        Title = "วิ่งลู่วิ่งอัตโนมัติ (AFK Treadmill)",
-        Desc  = "วิ่งลู่วิ่งเมื่อไม่มีงานอื่น — ปิดเพื่อให้ตัวละครยืนนิ่งเฉยๆ แทน",
-        Value = Cfg.AutoTreadmill,
-        Callback = function(v)
-            Cfg.AutoTreadmill = isOn(v)
-            if not Cfg.AutoTreadmill then
-                -- ออกจากลู่วิ่งทันทีเมื่อปิด
-                task.spawn(function() pcall(Nav.leaveTreadmill) end)
-            end
-            if treadmillToggleFarm and treadmillToggleFarm.SetValue and treadmillToggleFarm.Value ~= Cfg.AutoTreadmill then
-                treadmillToggleFarm:SetValue(Cfg.AutoTreadmill)
-            end
-            saveConfig()
-        end,
-    })
+    -- Treadmill toggle removed from Prog Tab
 
     TabProg:Dropdown({
         Title = "ระบบอัตโนมัติที่จะเปิด",
         Desc  = "อัปฐานกับลู่วิ่งจะซื้อทันทีที่เงินถึง ตรวจทุก 1 วินาที",
-        Values = { "อัปเกรดฐาน", "อัปเกรดลู่วิ่ง", "ซื้อ/ใส่เทรล", "ผสมสัตว์", "รับรางวัล" },
+        Values = { "อัปเกรดฐาน", "ซื้อ/ใส่เทรล", "ผสมสัตว์", "รับรางวัล" },
         Value = (function()
             local t = {}
             if Cfg.AutoBaseUpgrade then t[#t + 1] = "อัปเกรดฐาน" end
-            if Cfg.AutoTreadmillUp then t[#t + 1] = "อัปเกรดลู่วิ่ง" end
-            if Cfg.AutoTrails then t[#t + 1] = "ซื้อ/ใส่เทรล" end
+                        if Cfg.AutoTrails then t[#t + 1] = "ซื้อ/ใส่เทรล" end
             if Cfg.AutoFuse then t[#t + 1] = "ผสมสัตว์" end
             if Cfg.AutoClaim then t[#t + 1] = "รับรางวัล" end
             return t
@@ -6795,8 +6591,7 @@ task.spawn(function()
         Callback = function(v)
             local set = toSet(v)
             Cfg.AutoBaseUpgrade = set["อัปเกรดฐาน"] == true
-            Cfg.AutoTreadmillUp = set["อัปเกรดลู่วิ่ง"] == true
-            Cfg.AutoTrails      = set["ซื้อ/ใส่เทรล"] == true
+                        Cfg.AutoTrails      = set["ซื้อ/ใส่เทรล"] == true
             Cfg.AutoFuse        = set["ผสมสัตว์"] == true
             Cfg.AutoClaim       = set["รับรางวัล"] == true
             saveConfig()
