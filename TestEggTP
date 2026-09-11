@@ -1,115 +1,3 @@
-if not game:IsLoaded() then
-    pcall(function() game.Loaded:Wait() end)
-end
-
-local _Players = game:GetService("Players")
-local _LocalPlayer = _Players.LocalPlayer
-if not _LocalPlayer then
-    repeat
-        task.wait(0.1)
-        _LocalPlayer = _Players.LocalPlayer
-    until _LocalPlayer
-end
-
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local isMobileDevice = UserInputService and UserInputService.TouchEnabled == true
-
-----------------------------------------------------------------
--- 1. Character Integrity & Survival Protection (Zero Control Disruption)
-----------------------------------------------------------------
-local function hardenPlayerCharacter(c)
-    c = c or (_LocalPlayer and _LocalPlayer.Character)
-    if not c then return end
-    local hum = c:FindFirstChildOfClass("Humanoid")
-    if hum then
-        pcall(function()
-            hum.BreakJointsOnDeath = false
-        end)
-    end
-end
-
-task.spawn(function()
-    pcall(hardenPlayerCharacter)
-end)
-
-local function doHumanoidSwap(charInst)
-    charInst = charInst or (_LocalPlayer and _LocalPlayer.Character)
-    if not charInst then return false end
-    local origHum = charInst:FindFirstChildOfClass("Humanoid")
-    if not origHum then return false end
-
-    pcall(function()
-        origHum.BreakJointsOnDeath = false
-        local cloneHum = origHum:Clone()
-        cloneHum.WalkSpeed  = origHum.WalkSpeed
-        cloneHum.JumpPower  = origHum.JumpPower
-        cloneHum.MaxHealth  = origHum.MaxHealth
-        cloneHum.Health     = origHum.Health
-        cloneHum.AutoRotate = origHum.AutoRotate
-        cloneHum.Parent     = charInst
-
-        task.wait(0.05)
-        origHum:Destroy()
-
-        task.wait(0.05)
-        local anim = cloneHum:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHum)
-        workspace.CurrentCamera.CameraSubject = cloneHum
-
-        local animate = charInst:FindFirstChild("Animate")
-        if animate and animate:IsA("LocalScript") then
-            animate.Disabled = true
-            task.defer(function()
-                task.wait(0.05)
-                animate.Disabled = false
-            end)
-        end
-
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Running, true)
-        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
-        cloneHum.JumpPower = math.max(50, cloneHum.JumpPower)
-        cloneHum.JumpHeight = math.max(7.2, cloneHum.JumpHeight)
-        cloneHum:ChangeState(Enum.HumanoidStateType.Running)
-    end)
-    return true
-end
-
--- doHumanoidSwap will be called safely after character loads
-
-
-if _LocalPlayer then
-    _LocalPlayer.CharacterAdded:Connect(function(c)
-        task.wait(0.2)
-        pcall(hardenPlayerCharacter, c)
-    end)
-end
-
-----------------------------------------------------------------
--- 2. Complete Anti-Cheat & Detection Bypass Suite (Dice Hub Core)
-----------------------------------------------------------------
-if typeof(hookmetamethod) == "function" and not _G["_DesyncAntiRagdollHooked"] then
-    _G["_DesyncAntiRagdollHooked"] = true
-    local oldNewIndex
-    oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
-        if not checkcaller() and typeof(self) == "Instance" then
-            if self:IsA("Motor6D") and (key == "Enabled" and value == false) then
-                return nil
-            end
-            if self:IsA("Humanoid") then
-                if key == "PlatformStand" and value == true then
-                    return nil
-                end
-                if key == "Sit" and value == true and (Runtime and (Runtime.stealing or (Cfg and Cfg.AutoSteal))) then
-                    return nil
-                end
-            end
-        end
-        return oldNewIndex(self, key, value)
-    end))
-end
-
 -- Steal An Egg • auto farm
 -- Engine and UI are shared across builds; only the branding block below moves.
 ----------------------------------------------------------------
@@ -609,7 +497,7 @@ local Cfg = {
     WarpPct          = 0.8,
     ZoneHopStep      = 260,
     GuardSafeGap     = 26,
-    BoostWalkSpeed   = 900,
+    BoostWalkSpeed   = 16,
 
     -- survival
     GodMode          = true,
@@ -679,6 +567,29 @@ local Runtime = {
     conns       = {},
     eggTick     = 0,
 }
+
+if typeof(hookmetamethod) == "function" and not _G["_DesyncAntiRagdollHooked"] then
+    _G["_DesyncAntiRagdollHooked"] = true
+    pcall(function()
+        local oldNewIndex
+        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(self, key, value)
+            if not checkcaller() and typeof(self) == "Instance" then
+                if self:IsA("Motor6D") and (key == "Enabled" and value == false) then
+                    return nil
+                end
+                if self:IsA("Humanoid") then
+                    if key == "PlatformStand" and value == true then
+                        return nil
+                    end
+                    if key == "Sit" and value == true and (Runtime and (Runtime.stealing or (Cfg and Cfg.AutoSteal))) then
+                        return nil
+                    end
+                end
+            end
+            return oldNewIndex(self, key, value)
+        end))
+    end)
+end
 
 ----------------------------------------------------------------
 -- Config Persistence
@@ -1024,21 +935,13 @@ end
 ----------------------------------------------------------------
 -- Client Integrity & Detachment Engine
 ----------------------------------------------------------------
-local Guardless = { Reports = {
-    "ClientCharacter: CorrectionStarted",
-    "ClientCharacter: IntegrityViolation",
-} }
-
-function Guardless.detach()
-    return true
-end
-
-function Guardless.reattach()
-end
+local Guardless = {
+    StepSpeed = 400,
+    rayParams = RaycastParams.new(),
+}
+Guardless.rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function killClientIntegrity()
-    if Cfg.MuteReports then return Guardless.detach() end
-    Guardless.reattach()
     return true
 end
 
@@ -1214,12 +1117,6 @@ local function insideGameplay()
 end
 
 function enforceWalkSpeed()
-    local want = Cfg.BoostWalkSpeed or 900
-    if not want or want <= 0 then return end
-    local hum = humanoid()
-    if hum and hum.WalkSpeed < want then
-        pcall(function() hum.WalkSpeed = want end)
-    end
 end
 
 function guardPositions()
@@ -1315,8 +1212,7 @@ local function warpTo(dest, arriveDist, opts)
         local flat  = Vector3.new(delta.X, 0, delta.Z)
         if flat.Magnitude <= arriveDist then return true end
 
-        local hum   = humanoid()
-        local speed = math.max(60, (hum and hum.WalkSpeed or 16) * (Cfg.WarpPct or 0.8))
+        local speed = math.max(100, Cfg.GlideSpeed or 400)
         local step  = math.min(speed * dt, flat.Magnitude)
         local nextPos = root.Position + flat.Unit * step
 
@@ -1357,9 +1253,6 @@ end
 
 -- every trip that ends in a request to the server is walked at step speed:
 -- feet on the ground, velocity zeroed, ~400 studs a second
-Guardless.StepSpeed = 400
-Guardless.rayParams = RaycastParams.new()
-Guardless.rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 local function stepGroundY(pos)
     Guardless.rayParams.FilterDescendantsInstances = { char() }
@@ -1606,40 +1499,150 @@ local function moveTo(pos)
 end
 
 ----------------------------------------------------------------
--- God Mode & Character Harden Engine
+-- Character Rigidity & Anti-Ragdoll Engine (1:1 with Reference)
 ----------------------------------------------------------------
-local function neuterGameAntiCheats(c)
-    pcall(function()
-        c = c or char()
-        if c then
-            for _, v in ipairs(c:GetChildren()) do
-                if v.Name:find("AntiCollision") or v.Name:find("PushBack") then
-                    if v:IsA("LocalScript") or v:IsA("Script") then v.Disabled = true end
-                end
+local function Qq(c)
+    c = c or char()
+    if not c then return end
+    local root = c:FindFirstChild("HumanoidRootPart")
+    local torso = c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso") or root
+    if not torso then return end
+
+    for _, inst in ipairs(c:GetDescendants()) do
+        if inst:IsA("BallSocketConstraint") or inst:IsA("HingeConstraint") or inst:IsA("NoCollisionConstraint") then
+            pcall(function() inst:Destroy() end)
+        end
+    end
+    for _, inst in ipairs(c:GetDescendants()) do
+        if inst:IsA("Motor6D") and inst.Part0 and inst.Part1 then
+            inst.Enabled = true
+            local weldName = "RigidJointWeld_" .. inst.Name
+            local existWeld = inst.Part1:FindFirstChild(weldName)
+            if not existWeld then
+                local weld = Instance.new("WeldConstraint")
+                weld.Name = weldName
+                weld.Part0 = inst.Part0
+                weld.Part1 = inst.Part1
+                weld.Parent = inst.Part1
             end
         end
-        Workspace:SetAttribute("ClientObbyAntiTp", false)
-        if LocalPlayer then
-            local ps = LocalPlayer:FindFirstChild("PlayerScripts")
-            if ps then
-                for _, v in ipairs(ps:GetDescendants()) do
-                    if v.Name == "ObbyAntiTPClient" or v.Name:find("AntiTP") or v.Name:find("AntiCollision") then
-                        if v:IsA("LocalScript") then v.Disabled = true end
-                    end
-                end
-            end
+    end
+end
+
+local function yq(c)
+    c = c or char()
+    if not c then return end
+    local hum = c:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+            if hum.PlatformStand then hum.PlatformStand = false end
+            if hum.Sit then hum.Sit = false end
+        end)
+    end
+    for _, inst in ipairs(c:GetDescendants()) do
+        if inst:IsA("LocalScript") and (string.find(string.lower(inst.Name), "ragdoll") or string.find(string.lower(inst.Name), "fall")) then
+            inst.Disabled = true
+        end
+    end
+    Qq(c)
+end
+
+local function Hq(c)
+    c = c or char()
+    if not c then return end
+    yq(c)
+    for _, inst in ipairs(c:GetDescendants()) do
+        if inst:IsA("Motor6D") then
+            inst:GetPropertyChangedSignal("Enabled"):Connect(function()
+                if not inst.Enabled then inst.Enabled = true end
+            end)
+        end
+    end
+    c.DescendantAdded:Connect(function(inst)
+        if inst:IsA("BallSocketConstraint") or inst:IsA("HingeConstraint") or inst:IsA("NoCollisionConstraint") then
+            task.defer(function()
+                pcall(function() inst:Destroy() end)
+                yq(c)
+            end)
+        elseif inst:IsA("LocalScript") and (string.find(string.lower(inst.Name), "ragdoll") or string.find(string.lower(inst.Name), "fall")) then
+            inst.Disabled = true
         end
     end)
 end
 
+local function applyGodMode(enabled)
+    local c = char()
+    if not c then return end
+    local hum = c:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, not enabled)
+            if enabled and hum.Health < hum.MaxHealth then
+                hum.Health = hum.MaxHealth
+            end
+        end)
+    end
+    if enabled then
+        for _, part in ipairs(c:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanTouch = false
+                part.CanCollide = false
+            end
+        end
+    end
+    yq(c)
+end
+
 local function hardenCharacter(c)
     c = c or char()
-    local hum = c and c:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+    if not c then return end
+    local hum = c:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.BreakJointsOnDeath = false end)
+    end
+    yq(c)
+    Hq(c)
+end
+
+local function doHumanoidSwap(charInst)
+    charInst = charInst or char()
+    if not charInst then return false end
+    local origHum = charInst:FindFirstChildOfClass("Humanoid")
+    if not origHum then return false end
+
     pcall(function()
-        hum.BreakJointsOnDeath = false
+        origHum.BreakJointsOnDeath = false
+        local cloneHum = origHum:Clone()
+        cloneHum.Parent = charInst
+        origHum:Destroy()
+
+        local anim = cloneHum:FindFirstChildOfClass("Animator") or Instance.new("Animator", cloneHum)
+        workspace.CurrentCamera.CameraSubject = cloneHum
+
+        local animate = charInst:FindFirstChild("Animate")
+        if animate and animate:IsA("LocalScript") then
+            animate.Disabled = true
+            task.defer(function()
+                task.wait(0.05)
+                animate.Disabled = false
+            end)
+        end
+
+        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+        cloneHum:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+        cloneHum.JumpPower = math.max(50, cloneHum.JumpPower)
+        cloneHum.JumpHeight = math.max(7.2, cloneHum.JumpHeight)
+        cloneHum:ChangeState(Enum.HumanoidStateType.Running)
     end)
-    neuterGameAntiCheats(c)
+    Hq(charInst)
+    return true
 end
 
 ----------------------------------------------------------------
@@ -3194,16 +3197,16 @@ local function invokeCarryRemote(eggUid, slotKey)
     if _askCarryRemote then
         task.spawn(function()
             pcall(function()
+                local c = LocalPlayer and LocalPlayer.Character
+                local root = c and c:FindFirstChild("HumanoidRootPart")
+                local gCFrame = root and (root.CFrame * CFrame.new(0, 0, -3)) or CFrame.new()
+                local payload = { Uid = eggUid, EggUid = eggUid, GuardCFrame = gCFrame }
+                if slotKey then payload.FirstAreaSlotKey = slotKey end
+
                 if _askCarryRemote:IsA("RemoteFunction") then
-                    if slotKey then
-                        _askCarryRemote:InvokeServer({ Uid = eggUid, FirstAreaSlotKey = slotKey })
-                    end
-                    _askCarryRemote:InvokeServer({ Uid = eggUid })
+                    _askCarryRemote:InvokeServer(payload)
                 else
-                    if slotKey then
-                        _askCarryRemote:FireServer({ Uid = eggUid, FirstAreaSlotKey = slotKey })
-                    end
-                    _askCarryRemote:FireServer({ Uid = eggUid })
+                    _askCarryRemote:FireServer(payload)
                 end
             end)
         end)
@@ -8299,7 +8302,11 @@ task.spawn(function()
         Title = "โหมดอมตะ (God Mode)",
         Desc  = "เปิดไว้ตลอด — ตายทีเดียวไข่หลุดแล้ววนตายซ้ำ",
         Value = Cfg.GodMode,
-        Callback = function(v) Cfg.GodMode = isOn(v) saveConfig() end,
+        Callback = function(v)
+            Cfg.GodMode = isOn(v)
+            pcall(applyGodMode, Cfg.GodMode)
+            saveConfig()
+        end,
     })
 
     TabSys:Dropdown({
@@ -8721,7 +8728,7 @@ ENV[K_CLEANUP] = function()
     Runtime.conns = {}
     for _, c in ipairs(Runtime.pinConns or {}) do pcall(function() c:Disconnect() end) end
     Runtime.pinConns = nil
-    Guardless.reattach()
+    
     pcall(function() if UIWindow then UIWindow:Destroy() end end)
     UIWindow = nil
     pcall(function() if Runtime.floatGui then Runtime.floatGui:Destroy() end end)
@@ -8740,6 +8747,7 @@ if LocalPlayer then
         task.wait(0.6)
         hardenCharacter(c)
         pcall(doHumanoidSwap, c)
+        if Cfg.GodMode then pcall(applyGodMode, true) end
         Runtime.carryUid = nil
     end)
 
@@ -8759,19 +8767,7 @@ if LocalPlayer then
         end
     end)
 
-    Runtime.conns.velocityDamp = RunService.Heartbeat:Connect(function()
-        if not (Runtime.stealing or (Cfg and Cfg.AutoSteal)) then return end
-        local c = LocalPlayer.Character
-        if c then
-            for _, v in ipairs(c:GetDescendants()) do
-                if v:IsA("BasePart") then
-                    v.Velocity = Vector3.zero
-                    v.AssemblyLinearVelocity = Vector3.zero
-                    v.AssemblyAngularVelocity = Vector3.zero
-                end
-            end
-        end
-    end)
+-- velocityDamp removed to comply with server anti-cheat
 end
 
 Runtime.instantReady = true
@@ -8780,6 +8776,7 @@ Runtime.stats.startMoney = moneyNow()
 task.spawn(function()
     task.wait(0.6)
     pcall(doHumanoidSwap)
+    if Cfg.GodMode then pcall(applyGodMode, true) end
 end)
 
 if Cfg.AntiLag then
