@@ -53,7 +53,7 @@ local LuarmorConfig = {
     VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://flowauth.net/v1/loaders/7466e834552c4afd1105d75e876f898f.lua"
+    StartURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start"
 }
 
 -- ==============================================================================
