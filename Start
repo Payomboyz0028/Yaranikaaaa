@@ -1,4 +1,3 @@
--- PAYOMBØYZ HUB Discord: https://discord.gg/2q99DXV3q
 -- ==============================================================================
 -- 🛡️ Anti-Tamper & Anti-Cheat Mitigation (ป้องกัน BAC Kick บนมือถือและ PC)
 -- ==============================================================================
@@ -39,6 +38,23 @@ end)
 -- URL: https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start
 -- Dynamic UI Theme Inspired by Obsidian Glassmorphic 2 Architecture
 -- ==============================================================================
+
+-- ป้องกันการรันซ้ำซ้อนระดับ Global (Smooth Instance Replacement Guard)
+local _ENV = (getgenv and getgenv()) or _G
+
+-- ถ้ามี UI เก่าเปิดค้างอยู่ ให้ทำลายทิ้งก่อนเริ่มรอบใหม่
+pcall(function()
+    if _ENV.__PAYOMBOYZ_CURRENT_GUI and _ENV.__PAYOMBOYZ_CURRENT_GUI.Parent then
+        _ENV.__PAYOMBOYZ_CURRENT_GUI:Destroy()
+    end
+end)
+
+-- รีเซ็ตสถานะเพื่อยอมให้ผู้เล่นกด Execute ใหม่ได้เสมอ (Reload / Re-inject Support)
+_ENV.__PAYOMBOYZ_HUB_ACTIVE = true
+_ENV.__PAYOMBOYZ_SCRIPT_LAUNCHED = false
+
+local _isAuthenticating = false
+local _isScriptLaunched = false
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -121,10 +137,9 @@ local function L(key)
 end
 
 -- ==============================================================================
--- 🔐 REMOTE SECURE KEY LOADER (ดึงจาก FlowAuth Protected Loader)
+-- 🔐 REMOTE SECURE KEY LOADER (ดึงจาก FlowAuth Protected Loader: key.txt)
 -- URL: https://flowauth.net/v1/loaders/e67d7e13a4c4011f16ab036fb9582f8d.lua
--- แยกลิสต์คีย์ VVIP และ SuperVIP ทั้งหมดออกจาก Log-in.txt ไปไว้ใน key.txt
--- ป้องกันการ Deobfuscate หรือดักจับด้วย SpyHttp แบบ 100%
+-- แยกลิสต์คีย์ VVIP ออกจาก Log-in.txt 100% เพื่อป้องกันคีย์หลุดบน GitHub
 -- ==============================================================================
 local RemoteKeyDataCache = nil
 local RemoteKeyDataLoading = false
@@ -133,61 +148,60 @@ local RemoteKeyLoaderURL = "https://flowauth.net/v1/loaders/e67d7e13a4c4011f16ab
 local function GetRemoteKeyData()
     if RemoteKeyDataCache then return RemoteKeyDataCache end
 
-    -- ป้องกัน concurrent fetch ซ้ำซ้อน (ลด [FlowAuth]: Authenticated ซ้ำหลายรอบ)
+    -- ถ้ากำลังโหลดอยู่ ให้รอจนกว่าจะเสร็จ (ไม่ยิงซ้ำ)
     if RemoteKeyDataLoading then
         local waited = 0
-        while RemoteKeyDataLoading and waited < 10 do
+        while RemoteKeyDataLoading and waited < 6 do
             task.wait(0.2)
             waited = waited + 0.2
+            if RemoteKeyDataCache then return RemoteKeyDataCache end
         end
         return RemoteKeyDataCache
     end
     RemoteKeyDataLoading = true
 
+    -- เคลียร์ script_key ชั่วคราวเพื่อให้ FlowAuth โหลดแบบ Keyless ได้
     local prevKey = (getgenv and getgenv().script_key) or _G.script_key
     if getgenv then getgenv().script_key = nil end
     _G.script_key = nil
 
-    for attempt = 1, 3 do
-        local ok, data = pcall(function()
-            local raw = game:HttpGet(RemoteKeyLoaderURL)
-            if raw and type(raw) == "string" and #raw > 30 then
-                local fn = loadstring(raw)
-                if fn then
-                    local res = fn()
-                    if type(res) == "table" then
-                        return res
-                    end
+    local ok, data = pcall(function()
+        local raw = game:HttpGet(RemoteKeyLoaderURL)
+        if raw and type(raw) == "string" and #raw > 30 and not raw:find("automated source fetching") then
+            local fn = loadstring(raw)
+            if fn then
+                local res = fn()
+                if type(res) == "table" then
+                    return res
                 end
             end
-            return nil
-        end)
-
-        if ok and type(data) == "table" then
-            RemoteKeyDataCache = data
-            RemoteKeyDataLoading = false
-            if prevKey then
-                if getgenv then getgenv().script_key = prevKey end
-                _G.script_key = prevKey
-            end
-            return RemoteKeyDataCache
         end
-        if attempt < 3 then task.wait(0.4) end
-    end
+        -- Fallback ตรวจสอบตัวแปร Global เผื่อ FlowAuth Runtime ปล่อยผ่าน Environment
+        local envKeys = (getgenv and getgenv().__PAYOMBOYZ_VVIP_KEYS) or _G.__PAYOMBOYZ_VVIP_KEYS
+        if type(envKeys) == "table" then
+            return envKeys
+        end
+        return nil
+    end)
 
-    RemoteKeyDataLoading = false
     if prevKey then
         if getgenv then getgenv().script_key = prevKey end
         _G.script_key = prevKey
     end
+
+    RemoteKeyDataLoading = false
+
+    if ok and type(data) == "table" then
+        RemoteKeyDataCache = data
+        return RemoteKeyDataCache
+    end
+
     return nil
 end
 
 local function IsSuperVIPKey(k)
     if not k or k == "" then return false end
     k = k:gsub("%s+", "")
-    -- ตรวจสอบจาก Remote Data เท่านั้น (FlowAuth Loader e67d7e13...)
-    -- ไม่มี hardcode fallback — key ทั้งหมดอยู่ใน key.txt ที่ protect ผ่าน FlowAuth
     local data = GetRemoteKeyData()
     if data and type(data) == "table" and data.SuperVIP and data.SuperVIP[k] then
         return true
@@ -291,10 +305,10 @@ local function getLuarmorSDK()
     return nil
 end
 
--- ⚡ Preload SDK + RemoteKeyData แบบ parallel ตั้งแต่ต้น (ลด cold-start delay 5-10 นาที)
+-- ⚡ Preload Luarmor SDK + Remote VVIP Key List ใน background (ลด cold-start delay)
 task.spawn(function()
-    task.spawn(getLuarmorSDK)  -- โหลด SDK ก่อน background
-    task.spawn(GetRemoteKeyData)  -- โหลดคีย์ list ใน background
+    task.spawn(getLuarmorSDK)
+    task.spawn(GetRemoteKeyData)
 end)
 
 local function VerifyKeyWithLuarmorAPI(key)
@@ -405,12 +419,15 @@ local function safeFetch(url)
 
     if httprequest then
         local okReq, res = pcall(function()
+            local headers = {}
+            -- Only use WinInet User-Agent on Windows PC to prevent mobile Cloudflare bot flags
+            if not (UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled) then
+                headers["User-Agent"] = "Roblox/WinInet"
+            end
             return httprequest({
                 Url = url,
                 Method = "GET",
-                Headers = {
-                    ["User-Agent"] = "Roblox/WinInet"
-                }
+                Headers = headers
             })
         end)
         if okReq and res and res.Body and #res.Body > 50 and not res.Body:find("automated source fetching") then
@@ -423,6 +440,11 @@ end
 
 -- ฟังก์ชันรัน FlowAuth / Loader ปลายทางพร้อมระบบ Auto-Retry และ Retry UI
 local function RunFlowAuthWithRetry(targetUrl, userKey, maxRetries, onFailCallback)
+    if _isScriptLaunched then
+        warn("[PAYOMBØYZ HUB] Game script is already launched, ignoring duplicate call.")
+        return true
+    end
+
     maxRetries = maxRetries or 3
     local lastErr = nil
 
@@ -440,39 +462,44 @@ local function RunFlowAuthWithRetry(targetUrl, userKey, maxRetries, onFailCallba
     local isFlowAuth = type(targetUrl) == "string" and targetUrl:find("flowauth.net")
     local originalScriptKey = (getgenv and getgenv().script_key) or _G.script_key or script_key
 
+    -- เคลียร์ script_key ชั่วคราวสำหรับ Keyless FlowAuth
+    if isFlowAuth then
+        if getgenv then getgenv().script_key = nil end
+        _G.script_key = nil
+        script_key = nil
+    elseif userKey and userKey ~= "" then
+        if getgenv then getgenv().script_key = userKey end
+        _G.script_key = userKey
+        script_key = userKey
+    end
+
+    -- ขั้นตอนที่ 1: ดาวน์โหลดซอร์สโค้ด (Retry เฉพาะ Network/HTTP ถ้าโหลดไม่ผ่าน)
+    local source = nil
     for attempt = 1, maxRetries do
-        local ok, result = pcall(function()
-            -- หากปลายทางเป็น FlowAuth ที่ทำไว้แบบ Keyless ต้องเคลียร์ script_key ชั่วคราว
-            -- เพื่อไม่ให้ FlowAuth นำ Luarmor Key ไปยิงเช็คกับเซิร์ฟเวอร์ FlowAuth จนติด [FlowAuthError:invalid_key]
-            if isFlowAuth then
-                if getgenv then getgenv().script_key = nil end
-                _G.script_key = nil
-                script_key = nil
-            elseif userKey and userKey ~= "" then
-                if getgenv then getgenv().script_key = userKey end
-                _G.script_key = userKey
-                script_key = userKey
+        local okHttp, content = pcall(game.HttpGet, game, targetUrl)
+        if okHttp and type(content) == "string" and #content > 50 and not content:find("automated source fetching") then
+            source = content
+            break
+        else
+            local fallback = safeFetch(targetUrl)
+            if type(fallback) == "string" and #fallback > 50 and not fallback:find("automated source fetching") then
+                source = fallback
+                break
             end
+        end
 
-            local okHttp, content = pcall(game.HttpGet, game, targetUrl)
-            local source = (okHttp and type(content) == "string" and #content > 50
-                and not content:find("automated source fetching")) and content or safeFetch(targetUrl)
+        lastErr = (okHttp and type(content) == "string" and content:find("automated source fetching"))
+            and "FlowAuth Cloudflare rate-limit / bot detection triggered"
+            or "Network response empty or timed out"
 
-            if not source or type(source) ~= "string" or #source < 50 then
-                error("Empty response from server")
-            end
-            if source:find("automated source fetching") then
-                error("FlowAuth bot-detection triggered, retrying...")
-            end
+        if attempt < maxRetries then
+            warn(string.format("[PAYOMBØYZ HUB] Fetch attempt %d failed: %s — retrying in 0.5s", attempt, tostring(lastErr)))
+            task.wait(0.5)
+        end
+    end
 
-            local fn, compileErr = loadstring(source)
-            if not fn then
-                error("FlowAuth compile error: " .. tostring(compileErr))
-            end
-            fn()
-        end)
-
-        -- คืนค่า script_key หลังรันเสร็จ
+    if not source or #source < 50 then
+        warn("[PAYOMBØYZ HUB] All download attempts failed: " .. tostring(lastErr))
         if isFlowAuth and originalScriptKey then
             pcall(function()
                 if getgenv then getgenv().script_key = originalScriptKey end
@@ -480,22 +507,43 @@ local function RunFlowAuthWithRetry(targetUrl, userKey, maxRetries, onFailCallba
                 script_key = originalScriptKey
             end)
         end
-
-        if ok then return true end
-
-        lastErr = result
-        if attempt < maxRetries then
-            warn(string.format("[PAYOMBØYZ HUB] Attempt %d failed: %s — retrying in 1s", attempt, tostring(lastErr)))
-            task.wait(1.0)
+        _isAuthenticating = false
+        if type(onFailCallback) == "function" then
+            onFailCallback(lastErr or "Download failed")
         end
+        return false
     end
 
-    warn("[PAYOMBØYZ HUB] All attempts failed: " .. tostring(lastErr))
-    -- เรียก callback เพื่อแสดง Retry UI ถ้ามี
-    if type(onFailCallback) == "function" then
-        onFailCallback(lastErr)
+    -- ขั้นตอนที่ 2: Compile ซอร์สโค้ด
+    local fn, compileErr = loadstring(source, "=PayomboyZ_Game")
+    if not fn then
+        warn("[PAYOMBØYZ HUB] Script compile error: " .. tostring(compileErr))
+        if isFlowAuth and originalScriptKey then
+            pcall(function()
+                if getgenv then getgenv().script_key = originalScriptKey end
+                _G.script_key = originalScriptKey
+                script_key = originalScriptKey
+            end)
+        end
+        _isAuthenticating = false
+        if type(onFailCallback) == "function" then
+            onFailCallback("Compile error: " .. tostring(compileErr))
+        end
+        return false
     end
-    return false
+
+    -- ขั้นตอนที่ 3: สั่งรันสคริปต์แบบแยก Thread (รันครั้งเดียวเท่านั้น! ไม่ retry สคริปต์ซ้ำเมื่อมี runtime error)
+    _isScriptLaunched = true
+    _isAuthenticating = false
+
+    task.spawn(function()
+        local runOk, runErr = pcall(fn)
+        if not runOk then
+            warn("[PAYOMBØYZ HUB] Target script runtime notice: " .. tostring(runErr))
+        end
+    end)
+
+    return true
 end
 
 -- ==============================================================================
@@ -532,12 +580,6 @@ local function ClearSavedKeys()
     end)
 end
 
-local internalFlowAuthKeys = {
-    ["1HSDmI2yqaqA1ayodDaUysDNoKPA"] = true,
-    ["qOBneHkECSOWbd5NkgJWmM4q4J0Q"] = true,
-    ["Eb5b5fLVc1eJBiGXQ9v7hSScVe7h"] = true
-}
-
 local function LoadSavedKey()
     local saved = ""
     pcall(function()
@@ -552,12 +594,7 @@ local function LoadSavedKey()
         end
     end)
     if type(saved) == "string" then
-        saved = saved:gsub("%s+", "")
-        if internalFlowAuthKeys[saved] then
-            ClearSavedKeys()
-            return ""
-        end
-        return saved
+        return saved:gsub("%s+", "")
     end
     return ""
 end
@@ -574,7 +611,7 @@ local function GetPassedScriptKey()
             _G and _G.PayomboyZ_UserKey
         }
         for _, k in ipairs(candidates) do
-            if type(k) == "string" and k ~= "" and not internalFlowAuthKeys[k:gsub("%s+", "")] then
+            if type(k) == "string" and k ~= "" then
                 key = k
                 break
             end
@@ -830,14 +867,21 @@ local function PassToKeyChecker(key)
     if not key or key == "" then return end
     key = key:gsub("%s+", "")
 
+    if _isAuthenticating or _isScriptLaunched then
+        warn("[PAYOMBØYZ HUB] Auth or script launch already in progress, skipping duplicate call.")
+        return
+    end
+    _isAuthenticating = true
+
     task.spawn(function()
         local placeId = game.PlaceId
         local gameData = SupportedGames[placeId]
-        local targetUrl = gameData and gameData.URL or "https://flowauth.net/v1/loaders/cca8ac7603591eb07797edf39ad12fc9.lua"
+        local targetUrl = gameData and gameData.URL or "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
         local mapName = gameData and gameData.Name or "Game Hub"
 
         -- ตรวจสอบตัวรัน Xeno เฉพาะในแมพที่ไม่รองรับ
         if isXenoExecutor() and gameData and gameData.NoXeno then
+            _isAuthenticating = false
             ClearSavedKeys()
             CreateLoaderUI("❌ ตัวรัน Xeno ไม่รองรับในแมพ " .. mapName .. " กรุณาใช้ตัวรันอื่น", key)
             return
@@ -857,16 +901,23 @@ local function PassToKeyChecker(key)
         if isAuthed then
             SaveKey(key)
 
-            -- ตรวจสอบสิทธิ์ VVIP Map หากไม่ใช่คีย์ VVIP ให้ส่งไป Waiting Hub (ตาม Loader เดิม)
+            -- ตรวจสอบสิทธิ์ VVIP Map หากไม่ใช่คีย์ VVIP ให้ส่งไป Waiting Hub
             if gameData and gameData.IsVVIP and not isVVIP then
-                targetUrl = "https://flowauth.net/v1/loaders/cca8ac7603591eb07797edf39ad12fc9.lua"
+                targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
             end
 
-            -- รัน FlowAuth แบบไร้ร่องรอย พร้อมระบบ Auto-Retry 3 รอบ และส่ง key ไปด้วย
+            -- รัน FlowAuth / Loader ปลายทาง พร้อม Error Callback
             task.defer(function()
-                RunFlowAuthWithRetry(targetUrl, key, 3)
+                RunFlowAuthWithRetry(targetUrl, key, 3, function(errMsg)
+                    _isAuthenticating = false
+                    _isScriptLaunched = false
+                    task.spawn(function()
+                        CreateLoaderUI(L("retryFailed"), key)
+                    end)
+                end)
             end)
         else
+            _isAuthenticating = false
             ClearSavedKeys()
             CreateLoaderUI(authReason or "❌ Key เดิมหมดอายุแล้ว กรุณากรอก Key ใหม่", "")
         end
@@ -949,6 +1000,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
     if not parentOk then
         gui.Parent = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
     end
+    _ENV.__PAYOMBOYZ_CURRENT_GUI = gui
 
     local trackedConnections = {}
     local trackedThreads = {}
@@ -2707,9 +2759,6 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         local _threads = trackedThreads
         local _plansConn = plansMotionConnection
         local _viewConn = viewportConn
-        local _setStatus = setStatus
-        local _redeem = redeem
-        local _setButtonEnabled = setButtonEnabled
 
         -- ปิด Connection ทั้งหมดก่อน destroy
         pcall(function()
@@ -2728,13 +2777,15 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             if _gui and _gui.Parent then
                 _gui:Destroy()
             end
+            _ENV.__PAYOMBOYZ_CURRENT_GUI = nil
         end)
 
-        -- รัน FlowAuth ใน deferred thread (สลัด thread เดิมก่อน)
+        -- รัน FlowAuth ใน deferred thread
         task.defer(function()
-            task.wait(0.4)
-            local success = RunFlowAuthWithRetry(targetUrl, userKey, 3, function(errMsg)
-                -- FlowAuth ล้มเหลวทุกรอบ → เปิด UI ใหม่ให้ Retry
+            task.wait(0.15)
+            RunFlowAuthWithRetry(targetUrl, userKey, 3, function(errMsg)
+                _isAuthenticating = false
+                _isScriptLaunched = false
                 task.spawn(function()
                     task.wait(0.2)
                     if getgenv then
@@ -2747,9 +2798,11 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
         end)
     end
 
-    local busy = false
     local function redeemKey()
-        if busy then return end
+        if _isAuthenticating or _isScriptLaunched then
+            warn("[PAYOMBØYZ HUB] Auth or script launch already in progress, skipping click.")
+            return
+        end
 
         local placeId = game.PlaceId
         local gameData = SupportedGames[placeId]
@@ -2769,12 +2822,12 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             return
         end
 
-        busy = true
+        _isAuthenticating = true
         setButtonEnabled(redeem, false)
 
         task.spawn(function()
             -- 1. ตรวจสอบแมพที่กำลังเล่น
-            local targetUrl = gameData and gameData.URL or "https://flowauth.net/v1/loaders/cca8ac7603591eb07797edf39ad12fc9.lua"
+            local targetUrl = gameData and gameData.URL or "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
 
             -- 2. ตรวจสอบสิทธิ์ SuperVIP / VVIP / Luarmor
             local isSuperVIP = IsSuperVIPKey(key)
@@ -2785,7 +2838,7 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             if isSuperVIP then
                 setStatus(L("superVIPOk"), COLORS.cyan)
                 isAuthed = true
-                task.wait(0.3)
+                task.wait(0.15)
             else
                 setStatus(L("verifying"), COLORS.cyan)
                 isAuthed, luarmorReason = VerifyKeyWithLuarmorAPI(key)
@@ -2795,8 +2848,8 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
             if isAuthed then
                 if isVVIPMap and not isVVIP then
                     setStatus(L("vvipMapWarn"), COLORS.warning)
-                    targetUrl = "https://flowauth.net/v1/loaders/cca8ac7603591eb07797edf39ad12fc9.lua"
-                    task.wait(1.2)
+                    targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
+                    task.wait(0.8)
                 end
 
                 SaveKey(key)
@@ -2808,13 +2861,13 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
                 else
                     setStatus(L("authSuccess") .. mapName, COLORS.success)
                 end
-                task.wait(0.5)
+                task.wait(0.25)
 
                 ExecuteFlowAuth(targetUrl, key)
             else
+                _isAuthenticating = false
                 setStatus(luarmorReason or L("keyBad"), COLORS.danger)
                 setButtonEnabled(redeem, true)
-                busy = false
             end
         end)
     end
@@ -3329,6 +3382,8 @@ end
 -- ==============================================================================
 if getgenv and getgenv().PayomboyZ_LoggedOut then
     getgenv().PayomboyZ_LoggedOut = nil
+    _isScriptLaunched = false
+    _isAuthenticating = false
     ClearSavedKeys()
     local passedKey = GetPassedScriptKey()
     CreateLoaderUI("✅ ออกจากระบบเรียบร้อยแล้ว กรุณากรอกคีย์ใหม่", passedKey)
@@ -3337,6 +3392,8 @@ end
 
 if getgenv and getgenv().PayomboyZ_ShowUI then
     local passedKey = GetPassedScriptKey()
+    _isScriptLaunched = false
+    _isAuthenticating = false
     CreateLoaderUI(getgenv().PayomboyZ_ErrorMsg or "❌ คีย์หมดอายุ! กรุณากรอกใหม่", passedKey)
     getgenv().PayomboyZ_ShowUI = false
     return
@@ -3353,10 +3410,9 @@ local activeKey = (passedKey ~= "" and passedKey) or (savedKey ~= "" and savedKe
 
 if activeKey ~= "" then
     -- ==============================================================================
-    -- 🚀 SILENT AUTO-LOGIN (ไร้ UI 100% เพื่อหลบ BAC Anti-Cheat ตรวจจับ)
+    -- 🚀 FAST SILENT AUTO-LOGIN (รันทันที 0.2s ป้องกันคำสั่งทับซ้อน)
     -- ==============================================================================
-    -- รอให้ระบบเกมเสถียรก่อนยิงเช็ค API
-    task.wait(1.5)
+    task.wait(0.2)
     PassToKeyChecker(activeKey)
 else
     -- ถ้าไม่มีคีย์ ให้สร้าง UI โดยปล่อยช่องกรอก Key เป็นว่างไว้
