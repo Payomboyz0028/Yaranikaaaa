@@ -143,7 +143,7 @@ end
 -- ==============================================================================
 local RemoteKeyDataCache = nil
 local RemoteKeyDataLoading = false
-local RemoteKeyLoaderURL = "https://flowauth.net/v1/loaders/e67d7e13a4c4011f16ab036fb9582f8d.lua"
+local RemoteKeyLoaderURL = "https://raw.githubusercontent.com/payomboyz333/PAY-MB-YZ-HUB/refs/heads/main/Key-obfuscated.lua"
 
 local function GetRemoteKeyData()
     if RemoteKeyDataCache then return RemoteKeyDataCache end
@@ -166,8 +166,12 @@ local function GetRemoteKeyData()
     _G.script_key = nil
 
     local ok, data = pcall(function()
-        local raw = game:HttpGet(RemoteKeyLoaderURL)
-        if raw and type(raw) == "string" and #raw > 30 and not raw:find("automated source fetching") then
+        local fetchUrl = RemoteKeyLoaderURL
+        if type(fetchUrl) == "string" and fetchUrl:find("raw.githubusercontent.com") and not fetchUrl:find("%?") then
+            fetchUrl = fetchUrl .. "?t=" .. tostring(os.time())
+        end
+        local raw = game:HttpGet(fetchUrl)
+        if raw and type(raw) == "string" and #raw > 30 and not raw:find("404: Not Found") and not raw:find("automated source fetching") then
             local fn = loadstring(raw)
             if fn then
                 local res = fn()
@@ -176,7 +180,7 @@ local function GetRemoteKeyData()
                 end
             end
         end
-        -- Fallback ตรวจสอบตัวแปร Global เผื่อ FlowAuth Runtime ปล่อยผ่าน Environment
+        -- Fallback ตรวจสอบตัวแปร Global เผื่อ Runtime ปล่อยผ่าน Environment
         local envKeys = (getgenv and getgenv().__PAYOMBOYZ_VVIP_KEYS) or _G.__PAYOMBOYZ_VVIP_KEYS
         if type(envKeys) == "table" then
             return envKeys
@@ -202,9 +206,13 @@ end
 local function IsSuperVIPKey(k)
     if not k or k == "" then return false end
     k = k:gsub("%s+", "")
-    local data = GetRemoteKeyData()
-    if data and type(data) == "table" and data.SuperVIP and data.SuperVIP[k] then
-        return true
+    local engine = GetRemoteKeyData()
+    if engine and type(engine) == "table" then
+        if type(engine.IsSuperVIP) == "function" then
+            return engine.IsSuperVIP(k)
+        elseif engine.SuperVIP and engine.SuperVIP[k] then
+            return true
+        end
     end
     return false
 end
@@ -213,9 +221,13 @@ local function IsVVIPKey(k)
     if not k or k == "" then return false end
     k = k:gsub("%s+", "")
     if IsSuperVIPKey(k) then return true end
-    local data = GetRemoteKeyData()
-    if data and type(data) == "table" and data.VVIP and data.VVIP[k] then
-        return true
+    local engine = GetRemoteKeyData()
+    if engine and type(engine) == "table" then
+        if type(engine.IsVVIP) == "function" then
+            return engine.IsVVIP(k)
+        elseif engine.VVIP and engine.VVIP[k] then
+            return true
+        end
     end
     return false
 end
@@ -224,55 +236,55 @@ end
 -- 🎮 SMART ROUTER (จบในไฟล์เดียว)
 -- ==============================================================================
 local SupportedGames = {
-    -- [PlaceId] = { Name = "ชื่อเกม", URL = "FlowAuth URL", IsVVIP = true/false }
+    -- [PlaceId] = { Name = "ชื่อเกม", IsVVIP = true/false, NoXeno = true/false }
     
     -- 🆓 แมพฟรี (ทุกคนเล่นได้)
-    [13379208636] = { Name = "Attack On Titan Revolution", URL = "https://flowauth.net/v1/loaders/bff5319ff9626ee4c17c974d86cc23d8.lua", IsVVIP = false, NoXeno = true },
-    [14916516914] = { Name = "Attack On Titan Revolution", URL = "https://flowauth.net/v1/loaders/bff5319ff9626ee4c17c974d86cc23d8.lua", IsVVIP = false, NoXeno = true },
-    [14932214603] = { Name = "Attack On Titan Revolution", URL = "https://flowauth.net/v1/loaders/bff5319ff9626ee4c17c974d86cc23d8.lua", IsVVIP = false, NoXeno = true },
-    [125039473548047] = { Name = "Anime Card Farm", URL = "https://flowauth.net/v1/loaders/efa52f9c318db72fac0d9666e8345ee1.lua", IsVVIP = false, NoXeno = true },
-    [122446657157717] = { Name = "Arena Sniper", URL = "https://flowauth.net/v1/loaders/6790a5ad0a6dd8bc6f3427af8b2a4a9a.lua", IsVVIP = false },
-    [126042865144779] = { Name = "Arena Sniper", URL = "https://flowauth.net/v1/loaders/6790a5ad0a6dd8bc6f3427af8b2a4a9a.lua", IsVVIP = false },
-    [119259569670784] = { Name = "Arena Sniper", URL = "https://flowauth.net/v1/loaders/6790a5ad0a6dd8bc6f3427af8b2a4a9a.lua", IsVVIP = false },
-    [90165746516953] = { Name = "Arena Sniper", URL = "https://flowauth.net/v1/loaders/6790a5ad0a6dd8bc6f3427af8b2a4a9a.lua", IsVVIP = false },
-    [104973076655377] = { Name = "Capybara Vs Plant", URL = "https://flowauth.net/v1/loaders/d70689c642ff3c5f76a3b4115b447a47.lua", IsVVIP = false },
-    [128736949265057] = { Name = "Gakuran", URL = "https://flowauth.net/v1/loaders/bc7003e4767dab4c3c7bf5b1b2c0d2b9.lua", IsVVIP = false },
-    [126509999114328] = { Name = "99 Nights", URL = "https://flowauth.net/v1/loaders/6bff722a8b2781bac65ab5fc23b4bcde.lua", IsVVIP = false },
-    [79546208627805] = { Name = "99 Nights", URL = "https://flowauth.net/v1/loaders/6bff722a8b2781bac65ab5fc23b4bcde.lua", IsVVIP = false },
-    [2753915549] = { Name = "Blox Fruit", URL = "https://flowauth.net/v1/loaders/26f79a539401e318a37374e485a2e290.lua", IsVVIP = false },
-    [117539213094671] = { Name = "Roll a Gnome", URL = "https://flowauth.net/v1/loaders/20ecf51b2928f4ac9be6084656faf0f9.lua", IsVVIP = false },
-    [94640181989498] = { Name = "Chicken Fighter", URL = "https://flowauth.net/v1/loaders/61d86197df8b5c6865c09578575b29c9.lua", IsVVIP = false },
-    [94939256104840] = { Name = "Chicken Fighter", URL = "https://flowauth.net/v1/loaders/61d86197df8b5c6865c09578575b29c9.lua", IsVVIP = false },
-    [126884695634066] = { Name = "Grow a Garden 1", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/GGAGG", IsVVIP = false },
-    [97598239454123] = { Name = "Grow a Garden 2", URL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/GGAGG", IsVVIP = false },
-    [74102906764176] = { Name = "Greedy Grower", URL = "https://flowauth.net/v1/loaders/7b721371f8bce82e6a8f0a0963a09450.lua", IsVVIP = false },
-    [124216119978534] = { Name = "Ride a Pet", URL = "https://flowauth.net/v1/loaders/f35db6bfca50f3403060d6f570650e7c.lua", IsVVIP = false },
-    [76377501906469] = { Name = "Steal An Anime EGG!", URL = "https://flowauth.net/v1/loaders/c28ebc35fe6a0d71cfd35e782ffecbf4.lua", IsVVIP = false },
-    [16732694052] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
-    [72907489978215] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
-    [17722839796] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
-    [9794412726] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
-    [131716211654599] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
+    [13379208636] = { Name = "Attack On Titan Revolution", IsVVIP = false, NoXeno = true },
+    [14916516914] = { Name = "Attack On Titan Revolution", IsVVIP = false, NoXeno = true },
+    [14932214603] = { Name = "Attack On Titan Revolution", IsVVIP = false, NoXeno = true },
+    [125039473548047] = { Name = "Anime Card Farm", IsVVIP = false, NoXeno = true },
+    [122446657157717] = { Name = "Arena Sniper", IsVVIP = false },
+    [126042865144779] = { Name = "Arena Sniper", IsVVIP = false },
+    [119259569670784] = { Name = "Arena Sniper", IsVVIP = false },
+    [90165746516953] = { Name = "Arena Sniper", IsVVIP = false },
+    [104973076655377] = { Name = "Capybara Vs Plant", IsVVIP = false },
+    [128736949265057] = { Name = "Gakuran", IsVVIP = false },
+    [126509999114328] = { Name = "99 Nights", IsVVIP = false },
+    [79546208627805] = { Name = "99 Nights", IsVVIP = false },
+    [2753915549] = { Name = "Blox Fruit", IsVVIP = false },
+    [117539213094671] = { Name = "Roll a Gnome", IsVVIP = false },
+    [94640181989498] = { Name = "Chicken Fighter", IsVVIP = false },
+    [94939256104840] = { Name = "Chicken Fighter", IsVVIP = false },
+    [126884695634066] = { Name = "Grow a Garden 1", IsVVIP = false },
+    [97598239454123] = { Name = "Grow a Garden 2", IsVVIP = false },
+    [74102906764176] = { Name = "Greedy Grower", IsVVIP = false },
+    [124216119978534] = { Name = "Ride a Pet", IsVVIP = false },
+    [76377501906469] = { Name = "Steal An Anime EGG!", IsVVIP = false },
+    [16732694052] = { Name = "FISCH", IsVVIP = false },
+    [72907489978215] = { Name = "FISCH", IsVVIP = false },
+    [17722839796] = { Name = "FISCH", IsVVIP = false },
+    [9794412726] = { Name = "FISCH", IsVVIP = false },
+    [131716211654599] = { Name = "FISCH", IsVVIP = false },
 
     -- 👑 แมพ VVIP (เฉพาะ Special Key หรือ Luarmor ระดับ VIP)
-    [125927821145949] = { Name = "Mine a Mountain", URL = "https://flowauth.net/v1/loaders/98b87ede5c8628dcebabd96adaf3c412.lua", IsVVIP = true },
-    [142823291] = { Name = "Murder Mystery 2", URL = "https://flowauth.net/v1/loaders/f1a77e62bd19e1c733de11106efda2e3.lua", IsVVIP = true },
-    [107653945083776] = { Name = "Roll Anime To Fight", URL = "https://flowauth.net/v1/loaders/e79ba714f3ad0b48fdabcda1331e8de4.lua", IsVVIP = true },
-    [133623616308412] = { Name = "Roll Anime To Fight", URL = "https://flowauth.net/v1/loaders/e79ba714f3ad0b48fdabcda1331e8de4.lua", IsVVIP = true },
-    [107778070777162] = { Name = "Steal An Egg", URL = "https://flowauth.net/v1/loaders/ecbd5b609725dcba2bb27ea11e604e98.lua", IsVVIP = true },
-    [84515722934860] = { Name = "Anime Expedition", URL = "https://flowauth.net/v1/loaders/81ee1653734f6515b51955b49d4a876c.lua", IsVVIP = true },
-    [117533937949084] = { Name = "Iron Soul", URL = "https://flowauth.net/v1/loaders/c48efe5519450e428c9a21d9e544c8e5.lua", IsVVIP = true },
-    [116456628154258] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [132445869992129] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [136216144170036] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [88838868041067] = { Name = "Iron Soul Tower", URL = "https://flowauth.net/v1/loaders/24b6cc5ec31d333e4aad20b6c82d5b9b.lua", IsVVIP = true },
-    [91584731222940] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [130098968673165] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [119524374829397] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [80693195250724] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [112316840155266] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
-    [113290951185459] = { Name = "Anime Dice", URL = "https://flowauth.net/v1/loaders/9dbf52d4f6a038d31c7d5d06d570963f.lua", IsVVIP = true },
-    [132785415090516] = { Name = "Iron Soul Boss", URL = "https://flowauth.net/v1/loaders/7f40e19ade2480c58f20cc5dc1efdaed.lua", IsVVIP = true },
+    [125927821145949] = { Name = "Mine a Mountain", IsVVIP = true },
+    [142823291] = { Name = "Murder Mystery 2", IsVVIP = true },
+    [107653945083776] = { Name = "Roll Anime To Fight", IsVVIP = true },
+    [133623616308412] = { Name = "Roll Anime To Fight", IsVVIP = true },
+    [107778070777162] = { Name = "Steal An Egg", IsVVIP = true },
+    [84515722934860] = { Name = "Anime Expedition", IsVVIP = true },
+    [117533937949084] = { Name = "Iron Soul", IsVVIP = true },
+    [116456628154258] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [132445869992129] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [136216144170036] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [88838868041067] = { Name = "Iron Soul Tower", IsVVIP = true },
+    [91584731222940] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [130098968673165] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [119524374829397] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [80693195250724] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [112316840155266] = { Name = "Iron Soul Boss", IsVVIP = true },
+    [113290951185459] = { Name = "Anime Dice", IsVVIP = true },
+    [132785415090516] = { Name = "Iron Soul Boss", IsVVIP = true },
 }
 if getgenv then getgenv().PayomboyZ_SupportedGames = SupportedGames end
 _G.PayomboyZ_SupportedGames = SupportedGames
@@ -320,7 +332,14 @@ local function VerifyKeyWithLuarmorAPI(key)
         return true, "👑 ยืนยันสิทธิ์ SuperVIP สำเร็จ"
     end
 
-    -- 2. ตรวจสอบผ่าน Official Luarmor Public SDK (รองรับผู้ใช้ทั่วโลก ทุกตัวรัน)
+    -- 2. ตรวจสอบผ่าน KeyEngine (ซึ่งมี Developer Token และระบบ Hash ป้องกันอยู่ภายใน Key-obfuscated.lua)
+    local engine = GetRemoteKeyData()
+    if engine and type(engine.VerifyKey) == "function" then
+        local ok, reason = engine.VerifyKey(key)
+        return ok, reason
+    end
+
+    -- 3. Fallback: ตรวจสอบผ่าน Official Luarmor Public SDK (กรณี KeyEngine ยังโหลดไม่เสร็จ)
     local sdk = getLuarmorSDK()
     if sdk then
         local targetScriptIds = {
@@ -344,36 +363,6 @@ local function VerifyKeyWithLuarmorAPI(key)
                     return false, "❌ คีย์นี้ถูกระงับการใช้งาน (Banned)"
                 end
             end
-        end
-    end
-
-    -- 3. Fallback: ตรวจสอบผ่าน Developer API (ใช้ Project ID fcaefd984d0c3cd3a7335c0cf332c860 ที่ถูกต้อง)
-    local httprequest = (typeof(request) == "function" and request)
-                     or (typeof(http_request) == "function" and http_request)
-                     or (typeof(syn) == "table" and typeof(syn.request) == "function" and syn.request)
-                     or (http and http.request)
-
-    if httprequest then
-        local apiOk = false
-        pcall(function()
-            local res = httprequest({
-                Url = string.format("https://api.luarmor.net/v1/projects/%s/users?key=%s", "fcaefd984d0c3cd3a7335c0cf332c860", key),
-                Method = "GET",
-                Headers = {
-                    ["Authorization"] = "d0b05958677b218bbdcf23d89e65eae62272601824401966b1e4",
-                    ["Content-Type"] = "application/json",
-                    ["User-Agent"] = "Roblox/WinInet"
-                }
-            })
-            if res and res.Body then
-                local body = res.Body:lower()
-                if body:find('"success":true') or body:find('"status":"active"') or body:find('"valid":true') or body:find('"user"') then
-                    apiOk = true
-                end
-            end
-        end)
-        if apiOk then
-            return true, "✅ ยืนยันคีย์ Luarmor สำเร็จ"
         end
     end
 
@@ -474,15 +463,20 @@ local function RunFlowAuthWithRetry(targetUrl, userKey, maxRetries, onFailCallba
     end
 
     -- ขั้นตอนที่ 1: ดาวน์โหลดซอร์สโค้ด (Retry เฉพาะ Network/HTTP ถ้าโหลดไม่ผ่าน)
+    local fetchUrl = targetUrl
+    if type(fetchUrl) == "string" and fetchUrl:find("raw.githubusercontent.com") and not fetchUrl:find("%?") then
+        fetchUrl = fetchUrl .. "?t=" .. tostring(os.time())
+    end
+
     local source = nil
     for attempt = 1, maxRetries do
-        local okHttp, content = pcall(game.HttpGet, game, targetUrl)
-        if okHttp and type(content) == "string" and #content > 50 and not content:find("automated source fetching") then
+        local okHttp, content = pcall(game.HttpGet, game, fetchUrl)
+        if okHttp and type(content) == "string" and #content > 50 and not content:find("404: Not Found") and not content:find("automated source fetching") then
             source = content
             break
         else
-            local fallback = safeFetch(targetUrl)
-            if type(fallback) == "string" and #fallback > 50 and not fallback:find("automated source fetching") then
+            local fallback = safeFetch(fetchUrl)
+            if type(fallback) == "string" and #fallback > 50 and not fallback:find("404: Not Found") and not fallback:find("automated source fetching") then
                 source = fallback
                 break
             end
@@ -901,9 +895,20 @@ local function PassToKeyChecker(key)
         if isAuthed then
             SaveKey(key)
 
-            -- ตรวจสอบสิทธิ์ VVIP Map หากไม่ใช่คีย์ VVIP ให้ส่งไป Waiting Hub
-            if gameData and gameData.IsVVIP and not isVVIP then
-                targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
+            -- ดึง Target URL จาก KeyEngine ก่อนเป็นอันดับแรกเพื่อความปลอดภัยสูงสุด
+            local engine = GetRemoteKeyData()
+            local resolvedUrl = nil
+            if engine and type(engine.GetGameURL) == "function" then
+                resolvedUrl = engine.GetGameURL(placeId, key)
+            end
+
+            if resolvedUrl then
+                targetUrl = resolvedUrl
+            else
+                -- Fallback เดิมหาก KeyEngine ยังไม่ได้อัปเดตบน GitHub
+                if gameData and gameData.IsVVIP and not isVVIP then
+                    targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
+                end
             end
 
             -- รัน FlowAuth / Loader ปลายทาง พร้อม Error Callback
@@ -2846,10 +2851,20 @@ local function CreateLoaderUI(initialStatus, defaultKeyText)
 
             -- 3. ตรวจสอบว่าคีย์ผ่านไหม
             if isAuthed then
-                if isVVIPMap and not isVVIP then
-                    setStatus(L("vvipMapWarn"), COLORS.warning)
-                    targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
-                    task.wait(0.8)
+                local engine = GetRemoteKeyData()
+                local resolvedUrl = nil
+                if engine and type(engine.GetGameURL) == "function" then
+                    resolvedUrl = engine.GetGameURL(game.PlaceId, key)
+                end
+
+                if resolvedUrl then
+                    targetUrl = resolvedUrl
+                else
+                    if isVVIPMap and not isVVIP then
+                        setStatus(L("vvipMapWarn"), COLORS.warning)
+                        targetUrl = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey"
+                        task.wait(0.8)
+                    end
                 end
 
                 SaveKey(key)
