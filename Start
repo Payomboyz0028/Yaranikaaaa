@@ -234,6 +234,10 @@ local SupportedGames = {
     [74102906764176] = { Name = "Greedy Grower", URL = "https://flowauth.net/v1/loaders/7b721371f8bce82e6a8f0a0963a09450.lua", IsVVIP = false },
     [124216119978534] = { Name = "Ride a Pet", URL = "https://flowauth.net/v1/loaders/f35db6bfca50f3403060d6f570650e7c.lua", IsVVIP = false },
     [76377501906469] = { Name = "Steal An Anime EGG!", URL = "https://flowauth.net/v1/loaders/c28ebc35fe6a0d71cfd35e782ffecbf4.lua", IsVVIP = false },
+    [16732694052] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
+    [72907489978215] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
+    [17722839796] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
+    [9794412726] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
 
     -- 👑 แมพ VVIP (เฉพาะ Special Key หรือ Luarmor ระดับ VIP)
     [125927821145949] = { Name = "Mine a Mountain", URL = "https://flowauth.net/v1/loaders/98b87ede5c8628dcebabd96adaf3c412.lua", IsVVIP = true },
