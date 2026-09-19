@@ -238,6 +238,7 @@ local SupportedGames = {
     [72907489978215] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
     [17722839796] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
     [9794412726] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
+    [131716211654599] = { Name = "FISCH", URL = "https://flowauth.net/v1/loaders/15fcfda28d7152590167b9ccbe7fbe5e.lua", IsVVIP = false },
 
     -- 👑 แมพ VVIP (เฉพาะ Special Key หรือ Luarmor ระดับ VIP)
     [125927821145949] = { Name = "Mine a Mountain", URL = "https://flowauth.net/v1/loaders/98b87ede5c8628dcebabd96adaf3c412.lua", IsVVIP = true },
