@@ -9,15 +9,41 @@ if not game:IsLoaded() then
 end
 
 local LuarmorConfig = {
+    HubName = "PAYOMBØYZ Script HUB",
     ScriptId = "PayomboyZ_Hub",
     SavedKeyFile = "PayomboyZ_LuarmorKey.txt",
     GetKeyURL = "https://ads.luarmor.net/get_key?for=PBG-fVUxHRHebIHz",
-    DiscordURL = "https://discord.gg/GBKDAe23C",
+    DiscordURL = "https://discord.gg/KmrgQwbcMD",
+    VVIPURL = "https://payomboyz.rexzy.xyz/",
     LogoPath = "PayomboyZ_Logo.jpg",
     LogoURL = "https://raw.githubusercontent.com/payomboyz333/Anime-Card-Farm/refs/heads/main/543199739_2812856088914181_3062917809445648175_n.jpg",
-    StartURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start",
+    StartURL = "https://flowauth.net/v1/loaders/7466e834552c4afd1105d75e876f898f.lua",
+    LoaderURL = "https://flowauth.net/v1/loaders/ee307483c683f7b91c094ba2082ee8d7.lua",
     WaitKeyURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/WaitKey",
+    GithubStartURL = "https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/Start",
 }
+
+
+local currentLanguage = "TH"
+local Locales = {
+    EN = {
+        Waiting = "Waiting for game selection...",
+        CopyKey = "Copy Key URL",
+        Discord = "Join Discord",
+        VVIP = "VVIP Shop",
+        Language = "Language: EN",
+    },
+    TH = {
+        Waiting = "กำลังรอเลือกเกม...",
+        CopyKey = "คัดลอกลิงก์รับคีย์",
+        Discord = "เข้าสู่ดิสคอร์ด",
+        VVIP = "ร้านค้า VVIP",
+        Language = "ภาษา: ไทย",
+    }
+}
+local function L(key)
+    return (Locales[currentLanguage] and Locales[currentLanguage][key]) or (Locales["EN"][key]) or key
+end
 
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
@@ -29,6 +55,20 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local SoundService = game:GetService("SoundService")
 local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
+
+local function getParentGui()
+    if typeof(gethui) == "function" then
+        local ok, res = pcall(gethui)
+        if ok and res and typeof(res) == "Instance" then return res end
+    end
+    if typeof(cloneref) == "function" then
+        local ok, cg = pcall(function() return cloneref(game:GetService("CoreGui")) end)
+        if ok and cg then return cg end
+    end
+    local ok, cg = pcall(function() return game:GetService("CoreGui") end)
+    if ok and cg then return cg end
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+end
 
 -- ==============================================================================
 -- 🎨 COLOR PALETTE SPECIFICATION (OBSIDIAN GLASSMORPHIC 2 ENGINE)
@@ -143,7 +183,7 @@ end
 -- ==============================================================================
 local function ShowToast(title, message, isError)
     pcall(function()
-        local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+        local parentGui = getParentGui()
         local notifHolder = parentGui:FindFirstChild("PayomboyZ_ToastHolder")
         if not notifHolder then
             notifHolder = Instance.new("ScreenGui")
@@ -228,48 +268,171 @@ local function GetDynamicGameDatabase()
         end
     end
 
-    -- รายละเอียดเกม (หากเป็นแมพใหม่ที่เพิ่มใน loader.txt จะใช้ค่า Default ให้อัตโนมัติ)
-    local customDescs = {
-        ["Attack On Titan Revolution"] = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible",
-        ["Anime Card Farm"] = "Auto Card Roll, Pack Opener, Card Fusion & Farm",
-        ["Arena Sniper"] = "Silent Aim, Hitbox Expander, Auto Shoot & Kill",
-        ["Roll Anime To Fight"] = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units",
-        ["Gakuran"] = "Auto Combat, Auto Quest, Skill Spam & Speed",
-        ["99 Nights"] = "Auto Survive, Wood/Scrap Farm, AFK Dashboard",
-        ["Blox Fruit"] = "Auto Farm, Sea Events, Quest & Raid",
-        ["Roll a Gnome"] = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm",
-        ["Mine a Mountain"] = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan",
-        ["Murder Mystery 2"] = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun",
-        ["Capybara Vs Plant"] = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle",
-        ["Steal An Egg"] = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch",
-        ["Anime Expedition"] = "Auto Expedition, Dungeon Clear, Card Reroll & AFK",
-        ["Iron Soul"] = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill",
+    -- ฐานข้อมูล 16 แมพแท้ตรงตามที่เปิดขายจริง (ไม่มีแมพปลอม และไม่แยกซับเพลสซ้ำซ้อน)
+    local CanonicalGames = {
+        -- 🔱 VIP Package — 89 บาท (เล่นฟรีได้) [10 แมพ]
+        ["Capybara Vs Plant"] = {
+            Category = "VIP",
+            PlaceId = 104973076655377,
+            Description = "ออโต้ซื้อ/ออโต้ขาย/ออโต้เล่น/ออโต้อัปเกรด"
+        },
+        ["Anime Card Farm"] = {
+            Category = "VIP",
+            PlaceId = 125039473548047,
+            Description = "ออโต้ซื้อการ์ด/ออโต้ลงหอคอย-เรดบอส/ออโต้รีสถานะ/ออโต้อัปเกรด"
+        },
+        ["Attack On Titan Revolution"] = {
+            Category = "VIP",
+            PlaceId = 13379208636,
+            Description = "ออโต้ฟาร์ม/ออโต้ภารกิจ/ออโต้รับของ/ออโต้เทรด"
+        },
+        ["Arena Sniper"] = {
+            Category = "VIP",
+            PlaceId = 122446657157717,
+            Description = "โปรมองทะลุ(ESP)/โปรขยายHitBox/ทะลุกำแพง/ล็อคหัว"
+        },
+        ["Gakuran"] = {
+            Category = "VIP",
+            PlaceId = 128736949265057,
+            Description = "ออโต้โจมตี/ออโต้แพรี่/ออโต้ซ้ำ/ออโต้แบก/เปลี่ยนรูปแบบการต่อสู้"
+        },
+        ["99Nights at the forest"] = {
+            Category = "VIP",
+            PlaceId = 126509999114328,
+            Description = "ไก่ตัน/ออโต้ช่วยเด็ก/ออโต้ก่อไฟ/ออโต้เก็บเหรียญ"
+        },
+        ["Grow a Chicken FIGHTER!"] = {
+            Category = "VIP",
+            PlaceId = 94640181989498,
+            Description = "ออโต้เก็บขยะ/ออโต้ลงหอ-Chaos/ออโต้รีเบิร์ท/ออโต้อัปเกรด"
+        },
+        ["Steal An Anime Egg"] = {
+            Category = "VIP",
+            PlaceId = 76377501906469,
+            Description = "ออโต้ขโมยไข่(วาร์ป)/ออโต้วาง-ฟักไข่/ออโต้อัพเกรด"
+        },
+        ["Greedy Grower"] = {
+            Category = "VIP",
+            PlaceId = 74102906764176,
+            Description = "ออโต้เก็บ/ออโต้วิเคราะห์ฟ้าผ่า(แม่นยำ70%)/ออโต้ปลูก/ออโต้ขาย"
+        },
+        ["Blox Fruit"] = {
+            Category = "VIP",
+            PlaceId = 2753915549,
+            Description = "ไก่ตัน/ออโต้เควสLv.1-1500/ออโต้สุ่มผล/ออโต้ข้ามโลก/ออโต้ฟาร์ม(ไม่โดนดาเมจ)"
+        },
+        ["Dungeon Lootr"] = {
+            Category = "VIP",
+            PlaceId = 106484206883664,
+            Description = "คิลออร่า/ออโต้สกิล-เบิสต์/ออโต้10ดันเจี้ยน(รวมMage)/ออโต้เรด/ชาเลนจ์/เพย์โหลด/แบทเทิลพาส"
+        },
+        ["FISCH"] = {
+            Category = "VIP",
+            PlaceId = 16732694052,
+            Description = "ออโต้ตกปลาเพอร์เฟกต์/Shake/ออโต้ขาย/วาร์ปเกาะ/ESPจุดตกปลา"
+        },
+        ["Roll a Gnome"] = {
+            Category = "VIP",
+            PlaceId = 117539213094671,
+            Description = "ออโต้โรล/ออโต้ฟาร์ม/ออโต้อัปเกรด/ออโต้ขาย"
+        },
+
+        -- 👑 VVIP Package — 129 บาท (เล่นแมพVIPได้) [6 แมพ]
+        ["Roll Anime To Fight"] = {
+            Category = "VVIP",
+            PlaceId = 107653945083776,
+            Description = "ออโต้โรล/ออโต้ซื้อ/ออโต้เล่น/ออโต้อัปเกรด/ออโต้โคลน-อีโว/ออโต้ลงเรด"
+        },
+        ["Mine a Mountain"] = {
+            Category = "VVIP",
+            PlaceId = 125927821145949,
+            Description = "ระบบบิน/ระบบทะลุภูเขา/ESP มองหิน-มองแร่/ออโต้ขุด/ออโต้ขาย/ออโต้อัปเกรด-ซื้อระเบิด/หาแร่อันดับ1"
+        },
+        ["Murder Mystery 2 (MM2)"] = {
+            Category = "VVIP",
+            PlaceId = 142823291,
+            Description = "ออโต้เก็บเหรียญ/ทะลุกำแพง/ออโต้เปิด-สุ่มกล่อง"
+        },
+        ["Steal An Egg (ขโมยไข่)"] = {
+            Category = "VVIP",
+            PlaceId = 107778070777162,
+            Description = "ออโต้ขโมยไข่/ออโต้ฟัก-วางไข่/ออโต้อัพเกรด/หน้าจอ MONITORING DASHBORD/ออโต้วิ่งลู่"
+        },
+        ["Anime Expedetion (AE)"] = {
+            Category = "VVIP",
+            PlaceId = 84515722934860,
+            Description = "ไก่ตัน/ออโต้ฟาร์ม/ออโต้ซัมม่อน/ออโต้จัดทีม/ออโต้รับของ"
+        },
+        ["Iron Soul: Dungeon"] = {
+            Category = "VVIP",
+            PlaceId = 117533937949084,
+            Description = "ออโต้โจมตี(ไม่โดนดาเมจ)/ออโต้รีเผ่า/ออโต้เลือกด่าน/ระบบวาร์ปไปหาNPC"
+        },
+        ["Slayers 2"] = {
+            Category = "VVIP",
+            PlaceId = 16205713724,
+            Description = "ออโต้ฟาร์ม/ออโต้เควส/ระบบตีเร็ว/วาร์ปม็อบ/ออโต้อัปสเตตัส"
+        },
+        ["Anime Dice"] = {
+            Category = "VVIP",
+            PlaceId = 113290951185459,
+            Description = "ออโต้ทอยเต๋า/ออโต้ฟาร์ม/ออโต้อัปเกรด/ออโต้เคลมรางวัล"
+        },
     }
 
-    -- Default 14 Supported Games (เน็ตหลุดหรือเข้าครั้งแรกก็ขึ้นครบแน่นอน)
-    local defaultGames = {
-        { Name = "Attack On Titan Revolution", Category = "VIP", PlaceId = 13379208636, Description = "Auto Farm, Titan Kill, Auto Quest, Mobile Compatible" },
-        { Name = "Anime Card Farm", Category = "VIP", PlaceId = 125039473548047, Description = "Auto Card Roll, Pack Opener, Card Fusion & Farm" },
-        { Name = "Arena Sniper", Category = "VIP", PlaceId = 122446657157717, Description = "Silent Aim, Hitbox Expander, Auto Shoot & Kill" },
-        { Name = "Roll Anime To Fight", Category = "VIP", PlaceId = 107653945083776, Description = "Auto Roll, Auto Fight Bosses, Auto Upgrade Units" },
-        { Name = "Gakuran", Category = "VIP", PlaceId = 128736949265057, Description = "Auto Combat, Auto Quest, Skill Spam & Speed" },
-        { Name = "99 Nights", Category = "VIP", PlaceId = 126509999114328, Description = "Auto Survive, Wood/Scrap Farm, AFK Dashboard" },
-        { Name = "Blox Fruit", Category = "VIP", PlaceId = 2753915549, Description = "Auto Farm, Sea Events, Quest & Raid" },
-        { Name = "Roll a Gnome", Category = "VIP", PlaceId = 117539213094671, Description = "Auto Roll, Auto Buy Gnomes, Auto Hatch & Mutation Farm" },
-
-        { Name = "Mine a Mountain", Category = "VVIP", PlaceId = 125927821145949, Description = "Recursive Crystal ESP, Auto Mine, Teleport & Mountain Scan" },
-        { Name = "Murder Mystery 2", Category = "VVIP", PlaceId = 142823291, Description = "Coin Farm, Sheriff ESP, Murderer ESP, Auto Grab Gun" },
-        { Name = "Capybara Vs Plant", Category = "VVIP", PlaceId = 104973076655377, Description = "Auto Place Egg, Shop Dropdown Auto Sync, Auto Battle" },
-        { Name = "Steal An Egg", Category = "VVIP", PlaceId = 107778070777162, Description = "BAC Anti-Cheat Safe Navigation, Auto Egg Steal & Hatch" },
-        { Name = "Anime Expedition", Category = "VVIP", PlaceId = 84515722934860, Description = "Auto Expedition, Dungeon Clear, Card Reroll & AFK" },
-        { Name = "Iron Soul", Category = "VVIP", PlaceId = 117533937949084, Description = "Auto Boss Farm, Auto Skill, Dungeon Clear & Instant Kill" },
+    local OrderedGameNames = {
+        "Capybara Vs Plant",
+        "Anime Card Farm",
+        "Attack On Titan Revolution",
+        "Arena Sniper",
+        "Gakuran",
+        "99Nights at the forest",
+        "Grow a Chicken FIGHTER!",
+        "Steal An Anime Egg",
+        "Greedy Grower",
+        "Blox Fruit",
+        "Dungeon Lootr",
+        "FISCH",
+        "Roll a Gnome",
+        "Roll Anime To Fight",
+        "Mine a Mountain",
+        "Murder Mystery 2 (MM2)",
+        "Steal An Egg (ขโมยไข่)",
+        "Anime Expedetion (AE)",
+        "Iron Soul: Dungeon",
+        "Slayers 2",
+        "Anime Dice",
     }
 
-    for _, g in ipairs(defaultGames) do
-        addGame(g.Name, g.Category, g.PlaceId, g.Description)
+    -- ตาราง Alias เพื่อ map ชื่อ sub-place หรือชื่อย่อ เข้าหา Canonical Name
+    local NameAliases = {
+        ["Dungeon Lootr"] = "Dungeon Lootr",
+        ["PayomboyZ Lootr"] = "Dungeon Lootr",
+        ["FISCH"] = "FISCH",
+        ["Slayers 2"] = "Slayers 2",
+        ["Anime Dice"] = "Anime Dice",
+        ["Roll a Gnome"] = "Roll a Gnome",
+        ["99 Nights"] = "99Nights at the forest",
+        ["99Nights"] = "99Nights at the forest",
+        ["Chicken Fighter"] = "Grow a Chicken FIGHTER!",
+        ["Steal An Anime EGG!"] = "Steal An Anime Egg",
+        ["Murder Mystery 2"] = "Murder Mystery 2 (MM2)",
+        ["Steal An Egg"] = "Steal An Egg (ขโมยไข่)",
+        ["Anime Expedition"] = "Anime Expedetion (AE)",
+        ["Iron Soul"] = "Iron Soul: Dungeon",
+        ["Iron Soul Boss"] = "Iron Soul: Dungeon",
+        ["Iron Soul Tower"] = "Iron Soul: Dungeon",
+    }
+
+    -- โหลด 16 เกมแท้เข้าสู่ฐานข้อมูลหลักตามลำดับ
+    for _, name in ipairs(OrderedGameNames) do
+        local g = CanonicalGames[name]
+        if g then
+            addGame(name, g.Category, g.PlaceId, g.Description)
+        end
     end
 
-    -- 1. ดึงจาก GitHub LoaderPBG ล่าสุดก่อนเสมอ (บังคับสดใหม่ทุกครั้งด้วย ?t=tick())
+    -- 1. ซิงก์ PlaceId หรือข้อมูลสดเพิ่มเติมจาก GitHub LoaderPBG (ถ้ามี)
     local loaderCode = ""
     pcall(function()
         loaderCode = game:HttpGet("https://raw.githubusercontent.com/Payomboyz0028/Yaranikaaaa/refs/heads/main/LoaderPBG?t=" .. tostring(tick()))
@@ -277,10 +440,7 @@ local function GetDynamicGameDatabase()
 
     if loaderCode == "" and isfile and readfile then
         pcall(function()
-            local paths = {
-                "loader.txt",
-                "Loader.txt"
-            }
+            local paths = { "loader.txt", "Loader.txt", "Log-in.txt" }
             for _, p in ipairs(paths) do
                 if isfile(p) then
                     local code = readfile(p)
@@ -290,50 +450,17 @@ local function GetDynamicGameDatabase()
         end)
     end
 
-    -- 2. แกะตาราง NormalRouter และ VVIPRouter ด้วย String Index Substring Parsing
+    -- ป้องกันแมพแปลกปลอมหรือซับเพลสซ้ำซ้อนแทรกซึม
     if loaderCode ~= "" then
-        local normalStart = loaderCode:find("NormalRouter%s*=")
-        local vvipStart = loaderCode:find("VVIPRouter%s*=")
-        local pcallStart = loaderCode:find("pcall%s*%(") or #loaderCode
-
-        local normalSection = (normalStart and vvipStart) and loaderCode:sub(normalStart, vvipStart - 1) or loaderCode
-        local vvipSection = (vvipStart) and loaderCode:sub(vvipStart, pcallStart) or loaderCode
-
-        for placeIdStr, name in normalSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
+        for placeIdStr, body in loaderCode:gmatch("%[%s*(%d+)%s*%]%s*=%s*{(.-)}") do
             local pid = tonumber(placeIdStr)
-            if pid then
-                local desc = customDescs[name] or "Auto Farm & Game Automation"
-                addGame(name, "VIP", pid, desc)
-            end
-        end
-
-        for placeIdStr, name in vvipSection:gmatch("%[%s*(%d+)%s*%]%s*=%s*{%s*Name%s*=%s*[\"'](.-)[\"']") do
-            local pid = tonumber(placeIdStr)
-            if pid then
-                local desc = customDescs[name] or "Exclusive VVIP Map Script"
-                addGame(name, "VVIP", pid, desc)
-            end
-        end
-    end
-
-    -- 3. เติม Memory router สมทบหากมีข้อมูลในระบบ
-    local nRouter = (getgenv and getgenv().PayomboyZ_NormalRouter) or _G.PayomboyZ_NormalRouter
-    local vRouter = (getgenv and getgenv().PayomboyZ_VVIPRouter) or _G.PayomboyZ_VVIPRouter
-    if type(nRouter) == "table" then
-        for placeId, data in pairs(nRouter) do
-            if data and data.Name then
-                local name = data.Name
-                local desc = customDescs[name] or "Auto Farm & Game Automation"
-                addGame(name, "VIP", placeId, desc)
-            end
-        end
-    end
-    if type(vRouter) == "table" then
-        for placeId, data in pairs(vRouter) do
-            if data and data.Name then
-                local name = data.Name
-                local desc = customDescs[name] or "Exclusive VVIP Map Script"
-                addGame(name, "VVIP", placeId, desc)
+            local rawName = body:match('Name%s*=%s*["\'](.-)["\']')
+            if pid and rawName then
+                local canonical = NameAliases[rawName] or rawName
+                if CanonicalGames[canonical] and not addedGames[canonical] then
+                    local cData = CanonicalGames[canonical]
+                    addGame(canonical, cData.Category, pid, cData.Description)
+                end
             end
         end
     end
@@ -396,7 +523,7 @@ end
 -- ==============================================================================
 local function ShowHopConfirmPopup(gameData)
     -- ลบ popup เก่าถ้ามี
-    local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+    local parentGui = getParentGui()
     local existing = parentGui:FindFirstChild("PayomboyZ_HopPopup")
     if existing then existing:Destroy() end
 
@@ -775,7 +902,7 @@ end
 -- ==============================================================================
 -- 🚀 MAIN GUI INITIALIZATION (OBSIDIAN GLASSMORPHIC 2 UI ENGINE)
 -- ==============================================================================
-local parentGui = (typeof(gethui) == "function") and gethui() or CoreGui
+local parentGui = getParentGui()
 if parentGui:FindFirstChild("ObsidianGlass2_WaitingUI") then
     parentGui.ObsidianGlass2_WaitingUI:Destroy()
 end
@@ -1141,7 +1268,19 @@ logoutBtn.MouseButton1Click:Connect(function()
     performLogoutKeyClear()
     if gui then pcall(function() gui:Destroy() end) end
     pcall(function()
-        loadstring(game:HttpGet(LuarmorConfig.StartURL .. "?t=" .. tostring(tick())))()
+        if getgenv then getgenv().script_key = nil end
+        _G.script_key = nil
+        if shared then shared.script_key = nil end
+        script_key = nil
+
+        local ok = pcall(function()
+            loadstring(game:HttpGet(LuarmorConfig.StartURL))()
+        end)
+        if not ok then
+            pcall(function()
+                loadstring(game:HttpGet(LuarmorConfig.GithubStartURL .. "?t=" .. tostring(tick())))()
+            end)
+        end
     end)
 end)
 
@@ -1822,12 +1961,12 @@ perksLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 local vvipCustomPerks = {
-    ["Mine a Mountain"] = "⛏️ Mine a Mountain - สแกนแร่ คริสตัลหายากแบบอัตโนมัติ (Recursive ESP)",
-    ["Murder Mystery 2"] = "🗡️ Murder Mystery 2 - ปลดล็อก Coin Farm, Sheriff ESP & Auto Grab Gun",
-    ["Capybara Vs Plant"] = "🦙 Capybara Vs Plant - ระบบ Auto Place Egg & Sync Dropdown อัตโนมัติ",
-    ["Steal An Egg"] = "🥚 Steal An Egg - ระบบเดินขโมยไข่ปลอดภัย ป้องกันการตรวจจับ BAC Anti-Cheat",
-    ["Anime Expedition"] = "⚔️ Anime Expedition - ออโต้ลงดันเจี้ยน, Auto Reroll & AFK Card Farm",
-    ["Iron Soul"] = "🔥 Iron Soul - ออโต้ฟาร์มบอส, Auto Skill, Dungeon Clear & Instant Kill",
+    ["Roll Anime To Fight"] = "🎲 Roll Anime To Fight - ออโต้โรล/ออโต้ซื้อ/ออโต้เล่น/ออโต้อัปเกรด/ออโต้โคลน-อีโว/ออโต้ลงเรด",
+    ["Mine a Mountain"] = "⛏️ Mine a Mountain - ระบบบิน/ระบบทะลุภูเขา/ESP มองหิน-มองแร่/ออโต้ขุด/ออโต้ขาย/ออโต้อัปเกรด",
+    ["Murder Mystery 2 (MM2)"] = "🗡️ Murder Mystery 2 (MM2) - ออโต้เก็บเหรียญ/ทะลุกำแพง/ออโต้เปิด-สุ่มกล่อง",
+    ["Steal An Egg (ขโมยไข่)"] = "🥚 Steal An Egg (ขโมยไข่) - ออโต้ขโมยไข่/ออโต้ฟัก-วางไข่/ออโต้อัพเกรด/MONITORING DASHBORD",
+    ["Anime Expedetion (AE)"] = "⚔️ Anime Expedetion (AE) - ไก่ตัน/ออโต้ฟาร์ม/ออโต้ซัมม่อน/ออโต้จัดทีม/ออโต้รับของ",
+    ["Iron Soul: Dungeon"] = "🔥 Iron Soul: Dungeon - ออโต้โจมตี(ไม่โดนดาเมจ)/ออโต้รีเผ่า/ออโต้เลือกด่าน/ระบบวาร์ปไปหาNPC",
 }
 
 local VVIP_PERKS = {}
